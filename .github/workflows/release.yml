@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            npm_pkg: darwin-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            npm_pkg: darwin-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            npm_pkg: linux-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare npm package
+        run: |
+          mkdir -p npm/@aeph/${{ matrix.npm_pkg }}/bin
+          cp target/${{ matrix.target }}/release/ae npm/@aeph/${{ matrix.npm_pkg }}/bin/
+          chmod +x npm/@aeph/${{ matrix.npm_pkg }}/bin/ae
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.npm_pkg }}
+          path: npm/@aeph/${{ matrix.npm_pkg }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download darwin-arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin-arm64
+          path: npm/@aeph/darwin-arm64
+
+      - name: Download darwin-x64
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin-x64
+          path: npm/@aeph/darwin-x64
+
+      - name: Download linux-x64
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: npm/@aeph/linux-x64
+
+      - name: Publish @aeph/darwin-arm64
+        run: npm publish --access public
+        working-directory: npm/@aeph/darwin-arm64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @aeph/darwin-x64
+        run: npm publish --access public
+        working-directory: npm/@aeph/darwin-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @aeph/linux-x64
+        run: npm publish --access public
+        working-directory: npm/@aeph/linux-x64
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish aeph
+        run: npm publish --access public
+        working-directory: npm/aeph
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          cd artifacts
+          for dir in */; do
+            name="${dir%/}"
+            tar -czf "../release/ae-${name}.tar.gz" -C "$dir/bin" ae
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          generate_release_notes: true

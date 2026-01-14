@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require("child_process");
+const { existsSync } = require("fs");
+const { join } = require("path");
+
+const PLATFORMS = {
+  "darwin-arm64": "@aeph/darwin-arm64",
+  "darwin-x64": "@aeph/darwin-x64",
+  "linux-x64": "@aeph/linux-x64",
+};
+
+function getBinaryPath() {
+  const platformKey = `${process.platform}-${process.arch}`;
+  const packageName = PLATFORMS[platformKey];
+
+  if (!packageName) {
+    console.error(`Unsupported platform: ${platformKey}`);
+    console.error(`Supported platforms: ${Object.keys(PLATFORMS).join(", ")}`);
+    process.exit(1);
+  }
+
+  try {
+    const packagePath = require.resolve(`${packageName}/package.json`);
+    const binPath = join(packagePath, "..", "bin", "ae");
+
+    if (existsSync(binPath)) {
+      return binPath;
+    }
+  } catch (e) {
+    // Package not found
+  }
+
+  console.error(`Could not find binary for platform: ${platformKey}`);
+  console.error(`Please ensure ${packageName} is installed.`);
+  process.exit(1);
+}
+
+const binPath = getBinaryPath();
+
+try {
+  execFileSync(binPath, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+} catch (e) {
+  if (e.status !== undefined) {
+    process.exit(e.status);
+  }
+  throw e;
+}

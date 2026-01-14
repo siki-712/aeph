@@ -1,0 +1,29 @@
+{
+  "name": "aeph",
+  "version": "0.1.0",
+  "description": "A minimal TUI markdown editor with task management",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/siki-712/aeph.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "ae": "bin/ae"
+  },
+  "files": [
+    "bin"
+  ],
+  "optionalDependencies": {
+    "@aeph/darwin-arm64": "0.1.0",
+    "@aeph/darwin-x64": "0.1.0",
+    "@aeph/linux-x64": "0.1.0"
+  },
+  "keywords": [
+    "markdown",
+    "editor",
+    "tui",
+    "terminal",
+    "todo",
+    "task"
+  ]
+}
