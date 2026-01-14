@@ -1,0 +1,40 @@
+[package]
+name = "aeph"
+version = "0.1.0"
+edition = "2024"
+description = "aeph - A TUI markdown paper with task management"
+license = "MIT"
+
+[[bin]]
+name = "ae"
+path = "src/main.rs"
+
+[dependencies]
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Markdown
+pulldown-cmark = "0.12"
+pulldown-cmark-to-cmark = "18"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+anyhow = "1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# File paths
+directories = "5"
+
+# Unicode
+unicode-width = "0.2"
+arboard = "3.6.1"

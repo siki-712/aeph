@@ -1,0 +1,281 @@
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::Widget,
+};
+
+use super::theme;
+
+pub struct EditorWidget<'a> {
+    content: &'a str,
+    cursor_line: usize,
+    cursor_col: usize,
+    scroll_offset: usize,
+    show_line_numbers: bool,
+}
+
+impl<'a> EditorWidget<'a> {
+    pub fn new(content: &'a str, cursor_line: usize, cursor_col: usize) -> Self {
+        Self {
+            content,
+            cursor_line,
+            cursor_col,
+            scroll_offset: 0,
+            show_line_numbers: false,
+        }
+    }
+
+    pub fn scroll_offset(mut self, offset: usize) -> Self {
+        self.scroll_offset = offset;
+        self
+    }
+
+    pub fn show_line_numbers(mut self, show: bool) -> Self {
+        self.show_line_numbers = show;
+        self
+    }
+
+    fn highlight_line(&self, line: &str, in_code_block: bool) -> Line<'a> {
+        let base_style = Style::default();
+        let code_style = Style::default().add_modifier(Modifier::ITALIC);
+        let link_style = Style::default()
+            .fg(theme::fg_muted())
+            .add_modifier(Modifier::UNDERLINED);
+
+        let mut spans = Vec::new();
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+
+        // Add indent
+        if indent > 0 {
+            spans.push(Span::styled(
+                " ".repeat(indent),
+                if in_code_block { code_style } else { base_style.fg(Color::DarkGray) },
+            ));
+        }
+
+        // Code block fence
+        if trimmed.starts_with("```") {
+            spans.push(Span::styled(
+                trimmed.to_string(),
+                Style::default().fg(theme::accent()).add_modifier(Modifier::BOLD),
+            ));
+            return Line::from(spans);
+        }
+
+        // Inside code block - italic font
+        if in_code_block {
+            spans.push(Span::styled(trimmed.to_string(), code_style));
+            return Line::from(spans);
+        }
+
+        // Syntax highlighting for markdown
+        if trimmed.starts_with("- [ ] ") {
+            spans.push(Span::styled("- [ ] ", base_style.fg(theme::accent_yellow())));
+            Self::parse_with_links(&trimmed[6..], base_style, link_style, &mut spans);
+        } else if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+            spans.push(Span::styled("- [x] ", base_style.fg(theme::accent_green())));
+            Self::parse_with_links(&trimmed[6..], base_style, link_style, &mut spans);
+        } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+            Self::parse_with_links(trimmed, base_style, link_style, &mut spans);
+        } else if trimmed.starts_with("> ") {
+            let quote_style = base_style.add_modifier(Modifier::ITALIC);
+            Self::parse_with_links(trimmed, quote_style, link_style, &mut spans);
+        } else {
+            Self::parse_with_links(trimmed, base_style, link_style, &mut spans);
+        }
+
+        Line::from(spans)
+    }
+
+    /// Parse text and highlight markdown links [text](url) and inline code `code`
+    fn parse_with_links(text: &str, base_style: Style, link_style: Style, spans: &mut Vec<Span<'a>>) {
+        let code_style = Style::default().add_modifier(Modifier::ITALIC);
+
+        let mut remaining = text;
+
+        while !remaining.is_empty() {
+            // Find the next special character
+            let next_bracket = remaining.find('[');
+            let next_backtick = remaining.find('`');
+
+            match (next_bracket, next_backtick) {
+                (Some(b), Some(t)) if b < t => {
+                    // Try to parse link first
+                    if let Some((link_end, before, link)) = Self::try_parse_link(remaining, b) {
+                        if !before.is_empty() {
+                            spans.push(Span::styled(before.to_string(), base_style));
+                        }
+                        spans.push(Span::styled(link.to_string(), link_style));
+                        remaining = &remaining[link_end..];
+                        continue;
+                    }
+                    // Not a valid link, output up to and including [
+                    spans.push(Span::styled(remaining[..b + 1].to_string(), base_style));
+                    remaining = &remaining[b + 1..];
+                }
+                (Some(b), None) => {
+                    // Only bracket found
+                    if let Some((link_end, before, link)) = Self::try_parse_link(remaining, b) {
+                        if !before.is_empty() {
+                            spans.push(Span::styled(before.to_string(), base_style));
+                        }
+                        spans.push(Span::styled(link.to_string(), link_style));
+                        remaining = &remaining[link_end..];
+                        continue;
+                    }
+                    spans.push(Span::styled(remaining[..b + 1].to_string(), base_style));
+                    remaining = &remaining[b + 1..];
+                }
+                (Some(b), Some(t)) if t < b => {
+                    // Backtick comes first
+                    if let Some((code_end, before, code)) = Self::try_parse_inline_code(remaining, t) {
+                        if !before.is_empty() {
+                            spans.push(Span::styled(before.to_string(), base_style));
+                        }
+                        spans.push(Span::styled(code.to_string(), code_style));
+                        remaining = &remaining[code_end..];
+                        continue;
+                    }
+                    spans.push(Span::styled(remaining[..t + 1].to_string(), base_style));
+                    remaining = &remaining[t + 1..];
+                }
+                (None, Some(t)) => {
+                    // Only backtick found
+                    if let Some((code_end, before, code)) = Self::try_parse_inline_code(remaining, t) {
+                        if !before.is_empty() {
+                            spans.push(Span::styled(before.to_string(), base_style));
+                        }
+                        spans.push(Span::styled(code.to_string(), code_style));
+                        remaining = &remaining[code_end..];
+                        continue;
+                    }
+                    spans.push(Span::styled(remaining[..t + 1].to_string(), base_style));
+                    remaining = &remaining[t + 1..];
+                }
+                _ => {
+                    // No special characters, output the rest
+                    spans.push(Span::styled(remaining.to_string(), base_style));
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Try to parse a markdown link starting at position `start`
+    /// Returns (end_position, text_before, link_text) if successful
+    fn try_parse_link(text: &str, start: usize) -> Option<(usize, &str, &str)> {
+        let after_open = &text[start + 1..];
+        let close_bracket = after_open.find(']')?;
+        let after_close = &after_open[close_bracket + 1..];
+
+        if !after_close.starts_with('(') {
+            return None;
+        }
+
+        let close_paren = after_close.find(')')?;
+        let link_end = start + 1 + close_bracket + 1 + close_paren + 1;
+
+        Some((link_end, &text[..start], &text[start..link_end]))
+    }
+
+    /// Try to parse inline code starting at position `start`
+    /// Returns (end_position, text_before, code_text) if successful
+    fn try_parse_inline_code(text: &str, start: usize) -> Option<(usize, &str, &str)> {
+        let after_open = &text[start + 1..];
+        let close_backtick = after_open.find('`')?;
+
+        // Don't match empty backticks ``
+        if close_backtick == 0 {
+            return None;
+        }
+
+        let code_end = start + 1 + close_backtick + 1;
+
+        Some((code_end, &text[..start], &text[start..code_end]))
+    }
+}
+
+impl Widget for EditorWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let inner = area;
+
+        let lines: Vec<&str> = self.content.lines().collect();
+        let visible_height = inner.height as usize;
+        let total_lines = lines.len();
+
+        // Calculate line number width
+        let line_num_width = if self.show_line_numbers {
+            total_lines.to_string().len().max(3) + 1 // +1 for space
+        } else {
+            0
+        };
+
+        // Track code block state for all lines up to visible area
+        let mut in_code_block = false;
+        for line in lines.iter().take(self.scroll_offset) {
+            if line.trim_start().starts_with("```") {
+                in_code_block = !in_code_block;
+            }
+        }
+
+        for (i, line_idx) in (self.scroll_offset..).take(visible_height).enumerate() {
+            if line_idx >= lines.len() {
+                break;
+            }
+
+            let line = lines[line_idx];
+            let is_cursor_line = line_idx == self.cursor_line;
+            let y = inner.y + i as u16;
+
+            // Check if this line starts/ends a code block
+            let is_fence = line.trim_start().starts_with("```");
+            let was_in_code_block = in_code_block;
+            if is_fence {
+                in_code_block = !in_code_block;
+            }
+
+            // Draw line number
+            if self.show_line_numbers {
+                let line_num = format!("{:>width$} ", line_idx + 1, width = line_num_width - 1);
+                let num_style = if is_cursor_line {
+                    Style::default().fg(theme::accent_yellow())
+                } else {
+                    Style::default().fg(theme::fg_muted())
+                };
+                buf.set_string(inner.x, y, &line_num, num_style);
+            }
+
+            // Draw line content (fence lines and content inside code block)
+            let show_as_code = is_fence || was_in_code_block;
+            let styled_line = self.highlight_line(line, show_as_code);
+            let content_x = inner.x + line_num_width as u16;
+            buf.set_line(content_x, y, &styled_line, inner.width.saturating_sub(line_num_width as u16));
+
+            // Draw cursor
+            if is_cursor_line {
+                // Convert character index to display width
+                use unicode_width::UnicodeWidthChar;
+                let display_col: usize = line.chars()
+                    .take(self.cursor_col)
+                    .map(|c| c.width().unwrap_or(0))
+                    .sum();
+                let cursor_x = content_x + display_col as u16;
+                if cursor_x < inner.x + inner.width {
+                    // Get the character at cursor position (or space if at end of line)
+                    let cursor_char = line.chars().nth(self.cursor_col).unwrap_or(' ');
+                    let char_str = cursor_char.to_string();
+                    // Draw with reversed colors
+                    buf.set_string(
+                        cursor_x,
+                        y,
+                        &char_str,
+                        Style::default().bg(theme::cursor_bg()).fg(theme::cursor_fg()),
+                    );
+                }
+            }
+        }
+    }
+}
