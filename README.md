@@ -7,3 +7,17 @@
   </p>
 </div>
 
+
+# Installation
+
+```bash
+npm install -g aeph
+```
+
+## Usage
+
+```bash
+ae
+```
+
+See the <a href="https://github.com/siki-712/aeph/blob/main/GUIDE.md">guide</a>  for details.
