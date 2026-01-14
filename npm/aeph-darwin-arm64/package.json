@@ -1,13 +1,13 @@
 {
-  "name": "@aeph/linux-x64",
+  "name": "aeph-darwin-arm64",
   "version": "0.1.0",
-  "description": "aeph binary for Linux x64",
+  "description": "aeph binary for macOS ARM64",
   "repository": {
     "type": "git",
     "url": "https://github.com/siki-712/aeph.git"
   },
   "license": "MIT",
-  "os": ["linux"],
-  "cpu": ["x64"],
+  "os": ["darwin"],
+  "cpu": ["arm64"],
   "files": ["bin"]
 }

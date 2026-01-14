@@ -13,14 +13,14 @@ VERSION=$1
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
 # Update npm packages
-for pkg in npm/aeph npm/@aeph/darwin-arm64 npm/@aeph/darwin-x64 npm/@aeph/linux-x64; do
+for pkg in npm/aeph npm/aeph-darwin-arm64 npm/aeph-darwin-x64 npm/aeph-linux-x64; do
   sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" "$pkg/package.json"
 done
 
 # Update optionalDependencies versions in main package
-sed -i '' "s/\"@aeph\/darwin-arm64\": \".*\"/\"@aeph\/darwin-arm64\": \"$VERSION\"/" npm/aeph/package.json
-sed -i '' "s/\"@aeph\/darwin-x64\": \".*\"/\"@aeph\/darwin-x64\": \"$VERSION\"/" npm/aeph/package.json
-sed -i '' "s/\"@aeph\/linux-x64\": \".*\"/\"@aeph\/linux-x64\": \"$VERSION\"/" npm/aeph/package.json
+sed -i '' "s/\"aeph-darwin-arm64\": \".*\"/\"aeph-darwin-arm64\": \"$VERSION\"/" npm/aeph/package.json
+sed -i '' "s/\"aeph-darwin-x64\": \".*\"/\"aeph-darwin-x64\": \"$VERSION\"/" npm/aeph/package.json
+sed -i '' "s/\"aeph-linux-x64\": \".*\"/\"aeph-linux-x64\": \"$VERSION\"/" npm/aeph/package.json
 
 echo "Version bumped to $VERSION"
 echo ""

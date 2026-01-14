@@ -14,9 +14,9 @@
     "bin"
   ],
   "optionalDependencies": {
-    "@aeph/darwin-arm64": "0.1.0",
-    "@aeph/darwin-x64": "0.1.0",
-    "@aeph/linux-x64": "0.1.0"
+    "aeph-darwin-arm64": "0.1.0",
+    "aeph-darwin-x64": "0.1.0",
+    "aeph-linux-x64": "0.1.0"
   },
   "keywords": [
     "markdown",

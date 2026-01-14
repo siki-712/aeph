@@ -5,9 +5,9 @@ const { existsSync } = require("fs");
 const { join } = require("path");
 
 const PLATFORMS = {
-  "darwin-arm64": "@aeph/darwin-arm64",
-  "darwin-x64": "@aeph/darwin-x64",
-  "linux-x64": "@aeph/linux-x64",
+  "darwin-arm64": "aeph-darwin-arm64",
+  "darwin-x64": "aeph-darwin-x64",
+  "linux-x64": "aeph-linux-x64",
 };
 
 function getBinaryPath() {
