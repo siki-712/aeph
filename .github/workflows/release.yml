@@ -76,6 +76,12 @@ jobs:
           name: aeph-linux-x64
           path: npm/aeph-linux-x64
 
+      - name: Fix binary permissions
+        run: |
+          chmod +x npm/aeph-darwin-arm64/bin/ae
+          chmod +x npm/aeph-darwin-x64/bin/ae
+          chmod +x npm/aeph-linux-x64/bin/ae
+
       - name: Publish aeph-darwin-arm64
         run: npm publish --access public
         working-directory: npm/aeph-darwin-arm64
