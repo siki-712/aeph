@@ -345,6 +345,25 @@ fn run_app(
                                             state.doc_mut().delete_line();
                                             last_edit = Some(Instant::now());
                                         }
+                                        leader::LeaderCommand::YankLine => {
+                                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                                let line = state.doc().current_line().to_string();
+                                                if clipboard.set_text(&line).is_ok() {
+                                                    state.notification = Some("Line yanked".to_string());
+                                                }
+                                            }
+                                        }
+                                        leader::LeaderCommand::Paste => {
+                                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                                if let Ok(text) = clipboard.get_text() {
+                                                    state.push_undo();
+                                                    state.doc_mut().move_cursor_line_end();
+                                                    state.doc_mut().insert_newline();
+                                                    state.doc_mut().insert_str(&text);
+                                                    last_edit = Some(Instant::now());
+                                                }
+                                            }
+                                        }
                                     }
                                     continue;
                                 }
