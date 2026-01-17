@@ -45,6 +45,18 @@ Manage up to 9 documents
 | Ctrl+O | Open document picker |
 | 1-9 | Quick switch in picker |
 
+## Leader Commands
+
+Vim-style commands with `:` prefix (500ms timeout):
+
+| Command | Action |
+|---------|--------|
+| `:q` | Quit |
+| `:dd` | Delete current line |
+| `:yy` | Yank (copy) current line |
+| `:p` | Paste below cursor |
+| `:1`-`:9` | Switch to document 1-9 |
+
 ## Formatting
 
 - [ ] Format markdown with `Ctrl+F`
