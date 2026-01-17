@@ -75,6 +75,25 @@ fn run_app(
         if state.notification.is_some() && notification_time.is_none() {
             notification_time = Some(Instant::now());
         }
+
+        // Clear leader buffer after timeout
+        if let Some((buffer, started)) = state.leader_buffer.take() {
+            if started.elapsed() < leader::LEADER_TIMEOUT {
+                // Still valid, put it back
+                state.leader_buffer = Some((buffer, started));
+            } else {
+                // Timed out - insert ':' and buffered chars as regular text
+                if last_edit.is_none() {
+                    state.push_undo();
+                }
+                state.doc_mut().insert_char(':');
+                for c in buffer.chars() {
+                    state.doc_mut().insert_char(c);
+                }
+                last_edit = Some(Instant::now());
+            }
+        }
+
         terminal.draw(|frame| {
             let area = frame.area();
 
@@ -102,6 +121,7 @@ fn run_app(
             frame.render_widget(editor, chunks[0]);
 
             // Status bar
+            let leader_str = state.leader_buffer.as_ref().map(|(s, _)| s.as_str());
             let status = StatusBar::new(
                 doc.modified,
                 doc.cursor_line,
@@ -110,7 +130,8 @@ fn run_app(
             )
             .goto_input(state.goto_input.as_deref())
             .doc_indicator(state.current_doc + 1, state.documents.len())
-            .notification(state.notification.as_deref());
+            .notification(state.notification.as_deref())
+            .leader_input(leader_str);
             frame.render_widget(status, chunks[1]);
 
             // Help overlay
@@ -363,6 +384,11 @@ fn run_app(
                                                     last_edit = Some(Instant::now());
                                                 }
                                             }
+                                        }
+                                        leader::LeaderCommand::Quit => {
+                                            // Save last opened document for next session
+                                            let _ = storage::save_last_doc(state.current_doc);
+                                            return Ok(());
                                         }
                                     }
                                     continue;

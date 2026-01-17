@@ -7,6 +7,7 @@ pub enum LeaderCommand {
     DeleteLine,
     YankLine,
     Paste,
+    Quit,
 }
 
 pub fn match_command(input: &str) -> Option<LeaderCommand> {
@@ -14,10 +15,11 @@ pub fn match_command(input: &str) -> Option<LeaderCommand> {
         "dd" => Some(LeaderCommand::DeleteLine),
         "yy" => Some(LeaderCommand::YankLine),
         "p" => Some(LeaderCommand::Paste),
+        "q" => Some(LeaderCommand::Quit),
         _ => None,
     }
 }
 
 pub fn is_prefix(input: &str) -> bool {
-    ["d", "dd", "y", "yy", "p"].iter().any(|cmd| cmd.starts_with(input))
+    ["d", "dd", "y", "yy", "p", "q"].iter().any(|cmd| cmd.starts_with(input))
 }
