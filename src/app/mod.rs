@@ -1,4 +1,5 @@
 mod document;
+mod leader;
 mod state;
 
 use anyhow::Result;
@@ -330,6 +331,60 @@ fn run_app(
 
                     // Text input
                     (_, KeyCode::Char(c)) => {
+                        // Check leader key timeout
+                        if let Some((buffer, started)) = state.leader_buffer.take() {
+                            if started.elapsed() < leader::LEADER_TIMEOUT {
+                                let mut new_buffer = buffer.clone();
+                                new_buffer.push(c);
+
+                                // Check for complete command
+                                if let Some(cmd) = leader::match_command(&new_buffer) {
+                                    match cmd {
+                                        leader::LeaderCommand::DeleteLine => {
+                                            state.push_undo();
+                                            state.doc_mut().delete_line();
+                                            last_edit = Some(Instant::now());
+                                        }
+                                    }
+                                    continue;
+                                }
+
+                                // Check if still a valid prefix
+                                if leader::is_prefix(&new_buffer) {
+                                    state.leader_buffer = Some((new_buffer, started));
+                                    continue;
+                                }
+
+                                // Invalid sequence - insert buffered chars + current
+                                if last_edit.is_none() {
+                                    state.push_undo();
+                                }
+                                state.doc_mut().insert_char(':');
+                                for bc in buffer.chars() {
+                                    state.doc_mut().insert_char(bc);
+                                }
+                                state.doc_mut().insert_char(c);
+                                last_edit = Some(Instant::now());
+                                continue;
+                            } else {
+                                // Timeout - insert buffered chars
+                                if last_edit.is_none() {
+                                    state.push_undo();
+                                }
+                                state.doc_mut().insert_char(':');
+                                for bc in buffer.chars() {
+                                    state.doc_mut().insert_char(bc);
+                                }
+                                // Fall through to handle current char
+                            }
+                        }
+
+                        // Start leader sequence with ':'
+                        if c == ':' {
+                            state.leader_buffer = Some((String::new(), Instant::now()));
+                            continue;
+                        }
+
                         if last_edit.is_none() {
                             state.push_undo();
                         }

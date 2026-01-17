@@ -435,4 +435,30 @@ impl Document {
         self.cursor_line = target.min(self.line_count().saturating_sub(1));
         self.cursor_col = 0;
     }
+
+    pub fn delete_line(&mut self) {
+        let lines: Vec<String> = self.content.lines().map(|s| s.to_string()).collect();
+        if lines.is_empty() {
+            return;
+        }
+
+        let mut new_lines = lines;
+        if self.cursor_line < new_lines.len() {
+            new_lines.remove(self.cursor_line);
+        }
+
+        if new_lines.is_empty() {
+            self.content.clear();
+            self.cursor_line = 0;
+            self.cursor_col = 0;
+        } else {
+            self.content = new_lines.join("\n");
+            if !self.content.is_empty() {
+                self.content.push('\n');
+            }
+            self.cursor_line = self.cursor_line.min(new_lines.len().saturating_sub(1));
+            self.clamp_cursor_col();
+        }
+        self.modified = true;
+    }
 }
