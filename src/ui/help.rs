@@ -8,38 +8,59 @@ use ratatui::{
 
 use super::theme;
 
-pub struct HelpWidget;
+pub struct HelpWidget {
+    page: usize,
+}
 
 impl HelpWidget {
-    pub fn new() -> Self {
-        Self
+    pub fn new(page: usize) -> Self {
+        Self { page }
     }
 
-    fn shortcuts() -> Vec<(&'static str, &'static str)> {
-        vec![
-            ("Ctrl+C", "Copy all to clipboard"),
-            ("Ctrl+Q", "Quit"),
-            ("Ctrl+D", "Clear document"),
-            ("Ctrl+Z", "Undo"),
-            ("Ctrl+F", "Format markdown"),
-            ("Ctrl+T", "Toggle task under cursor"),
-            ("Ctrl+N", "New task"),
-            ("Ctrl+O", "Open document picker"),
-            ("Ctrl+G", "Go to line"),
-            ("Ctrl+H / F1", "Toggle help"),
-            ("Esc", "Close dialog"),
-            ("↑/↓/←/→", "Move cursor"),
-            ("PgUp/PgDn", "Scroll page"),
-        ]
+    pub const TOTAL_PAGES: usize = 2;
+
+    fn page_title(&self) -> &'static str {
+        match self.page {
+            0 => " Help (1/2) ",
+            1 => " Leader Mode (2/2) ",
+            _ => " Help ",
+        }
+    }
+
+    fn shortcuts(&self) -> Vec<(&'static str, &'static str)> {
+        match self.page {
+            0 => vec![
+                ("Ctrl+C", "Copy all to clipboard"),
+                ("Ctrl+D", "Clear document"),
+                ("Ctrl+Z", "Undo"),
+                ("Ctrl+F", "Format markdown"),
+                ("Ctrl+T", "Toggle task under cursor"),
+                ("Ctrl+N", "New task"),
+                ("Ctrl+O", "Open document picker"),
+                ("Ctrl+G", "Go to line"),
+                ("Ctrl+H / F1", "Toggle help"),
+                ("↑/↓/←/→", "Move cursor"),
+                ("PgUp/PgDn", "Scroll page"),
+            ],
+            1 => vec![
+                (":", "Start command (type within 500ms)"),
+                (":q", "Quit"),
+                (":dd", "Delete current line"),
+                (":yy", "Yank (copy) current line"),
+                (":p", "Paste below cursor"),
+                (":1 - :9", "Switch to document 1-9"),
+            ],
+            _ => vec![],
+        }
     }
 }
 
 impl Widget for HelpWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let shortcuts = Self::shortcuts();
+        let shortcuts = self.shortcuts();
 
         // Calculate popup size
-        let popup_width = 50.min(area.width.saturating_sub(4));
+        let popup_width = 56.min(area.width.saturating_sub(4));
         let popup_height = (shortcuts.len() as u16 + 4).min(area.height.saturating_sub(4));
 
         // Center the popup
@@ -62,7 +83,7 @@ impl Widget for HelpWidget {
 
         // Draw border
         let block = Block::default()
-            .title(" Help ")
+            .title(self.page_title())
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(fg).bg(bg))
@@ -95,7 +116,7 @@ impl Widget for HelpWidget {
 
         // Draw hint at bottom
         let hint = Line::from(Span::styled(
-            "Esc: close",
+            "←/→: page  Esc: close",
             Style::default().fg(theme::modal_fg_muted()).bg(bg),
         ));
         let hint_y = popup_area.y + popup_height - 2;

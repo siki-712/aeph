@@ -136,7 +136,7 @@ fn run_app(
 
             // Help overlay
             if state.show_help {
-                frame.render_widget(HelpWidget::new(), area);
+                frame.render_widget(HelpWidget::new(state.help_page), area);
             }
 
             // File picker overlay
@@ -205,6 +205,27 @@ fn run_app(
                         KeyCode::Enter => {
                             state.switch_to(state.picker_selection);
                             state.show_file_picker = false;
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                // Help page navigation
+                if state.show_help {
+                    match key.code {
+                        KeyCode::Esc => {
+                            state.show_help = false;
+                        }
+                        KeyCode::Left => {
+                            if state.help_page > 0 {
+                                state.help_page -= 1;
+                            }
+                        }
+                        KeyCode::Right => {
+                            if state.help_page < HelpWidget::TOTAL_PAGES - 1 {
+                                state.help_page += 1;
+                            }
                         }
                         _ => {}
                     }
@@ -290,6 +311,9 @@ fn run_app(
                     (KeyModifiers::CONTROL, KeyCode::Char('h')) |
                     (_, KeyCode::F(1)) => {
                         state.show_help = !state.show_help;
+                        if state.show_help {
+                            state.help_page = 0;
+                        }
                     }
 
                     // Logo
