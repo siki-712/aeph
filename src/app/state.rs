@@ -11,6 +11,7 @@ pub struct AppState {
     pub current_doc: usize,
     pub show_help: bool,
     pub show_file_picker: bool,
+    pub show_logo: bool,
     pub picker_selection: usize,
     pub viewport_height: usize,
     pub goto_input: Option<String>,
@@ -37,14 +38,15 @@ impl AppState {
             storage::load_last_doc().min(MAX_DOCUMENTS - 1)
         };
 
-        // Show help on first launch (all documents empty)
+        // Show logo on first launch (all documents empty)
         let all_empty = documents.iter().all(|d| d.content.is_empty());
 
         Ok(Self {
             documents,
             current_doc,
-            show_help: all_empty,
+            show_help: false,
             show_file_picker: false,
+            show_logo: all_empty,
             picker_selection: 0,
             viewport_height: 24,
             goto_input: None,
