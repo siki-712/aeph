@@ -40,9 +40,7 @@ impl<'a> EditorWidget<'a> {
     fn highlight_line(&self, line: &str, in_code_block: bool) -> Line<'a> {
         let base_style = Style::default();
         let code_style = Style::default().add_modifier(Modifier::ITALIC);
-        let link_style = Style::default()
-            .fg(theme::fg_muted())
-            .add_modifier(Modifier::UNDERLINED);
+        let link_style = base_style.add_modifier(Modifier::UNDERLINED);
 
         let mut spans = Vec::new();
         let trimmed = line.trim_start();
@@ -90,7 +88,23 @@ impl<'a> EditorWidget<'a> {
         Line::from(spans)
     }
 
-    /// Parse text and highlight markdown links [text](url) and inline code `code`
+    /// Check if text at given position starts with a URL prefix
+    fn find_url_start(text: &str) -> Option<usize> {
+        const URL_PREFIXES: &[&str] = &["https://", "http://", "file://", "ftp://"];
+        for prefix in URL_PREFIXES {
+            if let Some(pos) = text.find(prefix) {
+                return Some(pos);
+            }
+        }
+        None
+    }
+
+    /// Find the end of a URL (stops at whitespace)
+    fn find_url_end(text: &str) -> usize {
+        text.find(char::is_whitespace).unwrap_or(text.len())
+    }
+
+    /// Parse text and highlight markdown links [text](url), inline code `code`, and raw URLs
     fn parse_with_links(text: &str, base_style: Style, link_style: Style, spans: &mut Vec<Span<'a>>) {
         let code_style = Style::default().add_modifier(Modifier::ITALIC);
 
@@ -100,11 +114,26 @@ impl<'a> EditorWidget<'a> {
             // Find the next special character
             let next_bracket = remaining.find('[');
             let next_backtick = remaining.find('`');
+            let next_url = Self::find_url_start(remaining);
 
-            match (next_bracket, next_backtick) {
-                (Some(b), Some(t)) if b < t => {
-                    // Try to parse link first
-                    if let Some((link_end, before, link)) = Self::try_parse_link(remaining, b) {
+            // Find the earliest match
+            let candidates = [next_bracket, next_backtick, next_url];
+            let earliest = candidates.iter().filter_map(|&x| x).min();
+
+            match earliest {
+                Some(pos) if Some(pos) == next_url => {
+                    // URL comes first
+                    if pos > 0 {
+                        spans.push(Span::styled(remaining[..pos].to_string(), base_style));
+                    }
+                    let url_text = &remaining[pos..];
+                    let url_end = Self::find_url_end(url_text);
+                    spans.push(Span::styled(url_text[..url_end].to_string(), link_style));
+                    remaining = &url_text[url_end..];
+                }
+                Some(pos) if Some(pos) == next_bracket => {
+                    // Try to parse markdown link
+                    if let Some((link_end, before, link)) = Self::try_parse_link(remaining, pos) {
                         if !before.is_empty() {
                             spans.push(Span::styled(before.to_string(), base_style));
                         }
@@ -113,25 +142,12 @@ impl<'a> EditorWidget<'a> {
                         continue;
                     }
                     // Not a valid link, output up to and including [
-                    spans.push(Span::styled(remaining[..b + 1].to_string(), base_style));
-                    remaining = &remaining[b + 1..];
+                    spans.push(Span::styled(remaining[..pos + 1].to_string(), base_style));
+                    remaining = &remaining[pos + 1..];
                 }
-                (Some(b), None) => {
-                    // Only bracket found
-                    if let Some((link_end, before, link)) = Self::try_parse_link(remaining, b) {
-                        if !before.is_empty() {
-                            spans.push(Span::styled(before.to_string(), base_style));
-                        }
-                        spans.push(Span::styled(link.to_string(), link_style));
-                        remaining = &remaining[link_end..];
-                        continue;
-                    }
-                    spans.push(Span::styled(remaining[..b + 1].to_string(), base_style));
-                    remaining = &remaining[b + 1..];
-                }
-                (Some(b), Some(t)) if t < b => {
-                    // Backtick comes first
-                    if let Some((code_end, before, code)) = Self::try_parse_inline_code(remaining, t) {
+                Some(pos) if Some(pos) == next_backtick => {
+                    // Try to parse inline code
+                    if let Some((code_end, before, code)) = Self::try_parse_inline_code(remaining, pos) {
                         if !before.is_empty() {
                             spans.push(Span::styled(before.to_string(), base_style));
                         }
@@ -139,21 +155,8 @@ impl<'a> EditorWidget<'a> {
                         remaining = &remaining[code_end..];
                         continue;
                     }
-                    spans.push(Span::styled(remaining[..t + 1].to_string(), base_style));
-                    remaining = &remaining[t + 1..];
-                }
-                (None, Some(t)) => {
-                    // Only backtick found
-                    if let Some((code_end, before, code)) = Self::try_parse_inline_code(remaining, t) {
-                        if !before.is_empty() {
-                            spans.push(Span::styled(before.to_string(), base_style));
-                        }
-                        spans.push(Span::styled(code.to_string(), code_style));
-                        remaining = &remaining[code_end..];
-                        continue;
-                    }
-                    spans.push(Span::styled(remaining[..t + 1].to_string(), base_style));
-                    remaining = &remaining[t + 1..];
+                    spans.push(Span::styled(remaining[..pos + 1].to_string(), base_style));
+                    remaining = &remaining[pos + 1..];
                 }
                 _ => {
                     // No special characters, output the rest
