@@ -16,6 +16,7 @@ pub struct StatusBar<'a> {
     goto_input: Option<&'a str>,
     doc_num: usize,
     notification: Option<&'a str>,
+    leader_input: Option<&'a str>,
 }
 
 impl<'a> StatusBar<'a> {
@@ -33,6 +34,7 @@ impl<'a> StatusBar<'a> {
             goto_input: None,
             doc_num: 1,
             notification: None,
+            leader_input: None,
         }
     }
 
@@ -48,6 +50,11 @@ impl<'a> StatusBar<'a> {
 
     pub fn notification(mut self, msg: Option<&'a str>) -> Self {
         self.notification = msg;
+        self
+    }
+
+    pub fn leader_input(mut self, input: Option<&'a str>) -> Self {
+        self.leader_input = input;
         self
     }
 }
@@ -77,6 +84,16 @@ impl Widget for StatusBar<'_> {
                     Style::default().fg(theme::fg_primary()).bg(bg),
                 ),
             ]);
+            buf.set_line(area.x, area.y, &prompt, area.width);
+            return;
+        }
+
+        // If in leader key mode, show command input
+        if let Some(input) = self.leader_input {
+            let prompt = Line::from(Span::styled(
+                format!(" :{}", input),
+                Style::default().fg(theme::accent_yellow()).bg(bg),
+            ));
             buf.set_line(area.x, area.y, &prompt, area.width);
             return;
         }

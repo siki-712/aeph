@@ -1,4 +1,5 @@
 mod document;
+mod leader;
 mod state;
 
 use anyhow::Result;
@@ -74,6 +75,25 @@ fn run_app(
         if state.notification.is_some() && notification_time.is_none() {
             notification_time = Some(Instant::now());
         }
+
+        // Clear leader buffer after timeout
+        if let Some((buffer, started)) = state.leader_buffer.take() {
+            if started.elapsed() < leader::LEADER_TIMEOUT {
+                // Still valid, put it back
+                state.leader_buffer = Some((buffer, started));
+            } else {
+                // Timed out - insert ':' and buffered chars as regular text
+                if last_edit.is_none() {
+                    state.push_undo();
+                }
+                state.doc_mut().insert_char(':');
+                for c in buffer.chars() {
+                    state.doc_mut().insert_char(c);
+                }
+                last_edit = Some(Instant::now());
+            }
+        }
+
         terminal.draw(|frame| {
             let area = frame.area();
 
@@ -101,6 +121,7 @@ fn run_app(
             frame.render_widget(editor, chunks[0]);
 
             // Status bar
+            let leader_str = state.leader_buffer.as_ref().map(|(s, _)| s.as_str());
             let status = StatusBar::new(
                 doc.modified,
                 doc.cursor_line,
@@ -109,7 +130,8 @@ fn run_app(
             )
             .goto_input(state.goto_input.as_deref())
             .doc_indicator(state.current_doc + 1, state.documents.len())
-            .notification(state.notification.as_deref());
+            .notification(state.notification.as_deref())
+            .leader_input(leader_str);
             frame.render_widget(status, chunks[1]);
 
             // Help overlay
@@ -330,6 +352,84 @@ fn run_app(
 
                     // Text input
                     (_, KeyCode::Char(c)) => {
+                        // Check leader key timeout
+                        if let Some((buffer, started)) = state.leader_buffer.take() {
+                            if started.elapsed() < leader::LEADER_TIMEOUT {
+                                let mut new_buffer = buffer.clone();
+                                new_buffer.push(c);
+
+                                // Check for complete command
+                                if let Some(cmd) = leader::match_command(&new_buffer) {
+                                    match cmd {
+                                        leader::LeaderCommand::DeleteLine => {
+                                            state.push_undo();
+                                            state.doc_mut().delete_line();
+                                            last_edit = Some(Instant::now());
+                                        }
+                                        leader::LeaderCommand::YankLine => {
+                                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                                let line = state.doc().current_line().to_string();
+                                                if clipboard.set_text(&line).is_ok() {
+                                                    state.notification = Some("Line yanked".to_string());
+                                                }
+                                            }
+                                        }
+                                        leader::LeaderCommand::Paste => {
+                                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                                if let Ok(text) = clipboard.get_text() {
+                                                    state.push_undo();
+                                                    state.doc_mut().move_cursor_line_end();
+                                                    state.doc_mut().insert_newline();
+                                                    state.doc_mut().insert_str(&text);
+                                                    last_edit = Some(Instant::now());
+                                                }
+                                            }
+                                        }
+                                        leader::LeaderCommand::Quit => {
+                                            // Save last opened document for next session
+                                            let _ = storage::save_last_doc(state.current_doc);
+                                            return Ok(());
+                                        }
+                                    }
+                                    continue;
+                                }
+
+                                // Check if still a valid prefix
+                                if leader::is_prefix(&new_buffer) {
+                                    state.leader_buffer = Some((new_buffer, started));
+                                    continue;
+                                }
+
+                                // Invalid sequence - insert buffered chars + current
+                                if last_edit.is_none() {
+                                    state.push_undo();
+                                }
+                                state.doc_mut().insert_char(':');
+                                for bc in buffer.chars() {
+                                    state.doc_mut().insert_char(bc);
+                                }
+                                state.doc_mut().insert_char(c);
+                                last_edit = Some(Instant::now());
+                                continue;
+                            } else {
+                                // Timeout - insert buffered chars
+                                if last_edit.is_none() {
+                                    state.push_undo();
+                                }
+                                state.doc_mut().insert_char(':');
+                                for bc in buffer.chars() {
+                                    state.doc_mut().insert_char(bc);
+                                }
+                                // Fall through to handle current char
+                            }
+                        }
+
+                        // Start leader sequence with ':'
+                        if c == ':' {
+                            state.leader_buffer = Some((String::new(), Instant::now()));
+                            continue;
+                        }
+
                         if last_edit.is_none() {
                             state.push_undo();
                         }

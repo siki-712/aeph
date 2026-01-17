@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use super::document::Document;
 use crate::storage;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub viewport_height: usize,
     pub goto_input: Option<String>,
     pub notification: Option<String>,
+    pub leader_buffer: Option<(String, Instant)>,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
             viewport_height: 24,
             goto_input: None,
             notification: None,
+            leader_buffer: None,
         })
     }
 
