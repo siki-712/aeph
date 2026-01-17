@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::storage;
-use crate::ui::{EditorWidget, FilePickerWidget, HelpWidget, StatusBar};
+use crate::ui::{EditorWidget, FilePickerWidget, HelpWidget, LogoWidget, StatusBar};
 use state::AppState;
 
 pub fn run(file: Option<PathBuf>) -> Result<()> {
@@ -124,6 +124,11 @@ fn run_app(
                     FilePickerWidget::new(&names, state.current_doc, state.picker_selection),
                     area,
                 );
+            }
+
+            // Logo overlay
+            if state.show_logo {
+                frame.render_widget(LogoWidget::new(), area);
             }
         })?;
 
@@ -265,6 +270,11 @@ fn run_app(
                         state.show_help = !state.show_help;
                     }
 
+                    // Logo
+                    (KeyModifiers::CONTROL, KeyCode::Char('l')) => {
+                        state.show_logo = !state.show_logo;
+                    }
+
                     // Clear document
                     (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
                         state.clear();
@@ -281,6 +291,7 @@ fn run_app(
                     (_, KeyCode::Esc) => {
                         state.show_help = false;
                         state.show_file_picker = false;
+                        state.show_logo = false;
                     }
 
                     // Navigation
