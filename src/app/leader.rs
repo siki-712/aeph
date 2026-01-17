@@ -8,6 +8,7 @@ pub enum LeaderCommand {
     YankLine,
     Paste,
     Quit,
+    SwitchDoc(usize),
 }
 
 pub fn match_command(input: &str) -> Option<LeaderCommand> {
@@ -16,6 +17,15 @@ pub fn match_command(input: &str) -> Option<LeaderCommand> {
         "yy" => Some(LeaderCommand::YankLine),
         "p" => Some(LeaderCommand::Paste),
         "q" => Some(LeaderCommand::Quit),
+        "1" => Some(LeaderCommand::SwitchDoc(0)),
+        "2" => Some(LeaderCommand::SwitchDoc(1)),
+        "3" => Some(LeaderCommand::SwitchDoc(2)),
+        "4" => Some(LeaderCommand::SwitchDoc(3)),
+        "5" => Some(LeaderCommand::SwitchDoc(4)),
+        "6" => Some(LeaderCommand::SwitchDoc(5)),
+        "7" => Some(LeaderCommand::SwitchDoc(6)),
+        "8" => Some(LeaderCommand::SwitchDoc(7)),
+        "9" => Some(LeaderCommand::SwitchDoc(8)),
         _ => None,
     }
 }

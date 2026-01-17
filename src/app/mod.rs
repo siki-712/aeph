@@ -390,6 +390,11 @@ fn run_app(
                                             let _ = storage::save_last_doc(state.current_doc);
                                             return Ok(());
                                         }
+                                        leader::LeaderCommand::SwitchDoc(idx) => {
+                                            if idx < state.documents.len() {
+                                                state.switch_to(idx);
+                                            }
+                                        }
                                     }
                                     continue;
                                 }
