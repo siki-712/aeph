@@ -41,7 +41,7 @@ impl Widget for LogoWidget {
         // Calculate popup size with more padding
         let content_width = logo.iter().map(|l| l.len()).max().unwrap_or(0).max(tagline.len());
         let popup_width = (content_width as u16 + 12).min(area.width.saturating_sub(4));
-        let popup_height = (logo.len() as u16 + 10).min(area.height.saturating_sub(4));
+        let popup_height = (logo.len() as u16 + 12).min(area.height.saturating_sub(4));
 
         // Center the popup
         let popup_x = (area.width.saturating_sub(popup_width)) / 2 + area.x;
@@ -107,5 +107,15 @@ impl Widget for LogoWidget {
             ));
             buf.set_line(inner.x + x_offset, version_y, &version_line, inner.width);
         }
+
+        // Draw hint at bottom (centered)
+        let hint = "Press Esc to start";
+        let hint_y = popup_area.y + popup_height - 2;
+        let x_offset = (inner.width.saturating_sub(hint.len() as u16)) / 2;
+        let hint_line = Line::from(Span::styled(
+            hint,
+            Style::default().fg(fg_muted).bg(bg),
+        ));
+        buf.set_line(inner.x + x_offset, hint_y, &hint_line, inner.width);
     }
 }
