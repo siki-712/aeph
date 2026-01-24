@@ -74,7 +74,35 @@ Press Enter on a list item to continue:
 > Blockquotes also continue
 > when you press Enter
 
+### Auto-Pairing
+
+Brackets and quotes auto-pair with cursor centering:
+
+| Input | Result | Cursor Position |
+|-------|--------|-----------------|
+| `()` | `()` | `(\|)` |
+| `[]` | `[]` | `[\|]` |
+| `{}` | `{}` | `{\|}` |
+| ` `` ` | ` `` ` | `` `\|` `` |
+| `""` | `""` | `"\|"` |
+| `''` | `''` | `'\|'` |
+| `****` | `****` | `**\|**` |
+| `~~~~` | `~~~~` | `~~\|~~` |
+
+Type the same character again to escape from the pair and continue typing.
+
 ## Customization
+
+### Configuration File
+
+Create `~/.config/aeph/config.toml` to customize behavior:
+
+```toml
+# Enable/disable auto-pairing for brackets and quotes (default: true)
+auto_pair = true
+```
+
+### Environment Variables
 
 Set colors via environment variables:
 
