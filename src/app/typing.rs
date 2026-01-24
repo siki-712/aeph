@@ -42,17 +42,21 @@ pub fn should_center_for_bracket(char_before: Option<char>, c: char) -> Option<u
 
 /// Check if cursor should be centered after typing N consecutive same characters.
 /// Returns Some(move_back) with the number of positions to move back.
+/// Only triggers when there are EXACTLY (count-1) consecutive matching chars before.
 pub fn should_center_for_same_char(chars_before: &str, c: char) -> Option<usize> {
     for &(target_char, count) in SAME_CHAR_CENTER {
         if c == target_char {
-            // We need (count - 1) consecutive chars before cursor to trigger centering
+            // Count consecutive matching chars at the end of chars_before
+            let consecutive = chars_before
+                .chars()
+                .rev()
+                .take_while(|&ch| ch == target_char)
+                .count();
+            // Only center if we have EXACTLY (count-1) consecutive chars
+            // This prevents centering when we're already past the pattern (e.g., typing ```)
             let needed = count - 1;
-            if chars_before.len() >= needed {
-                let suffix: String = chars_before.chars().rev().take(needed).collect();
-                if suffix.chars().all(|ch| ch == target_char) {
-                    // Move back by half the count
-                    return Some(count / 2);
-                }
+            if consecutive == needed {
+                return Some(count / 2);
             }
         }
     }
@@ -90,24 +94,31 @@ mod tests {
 
     #[test]
     fn test_should_center_for_same_char() {
-        // Backtick: 2 chars for centering
+        // Backtick: 2 chars for centering (EXACTLY 1 before)
         assert_eq!(should_center_for_same_char("`", '`'), Some(1));
         assert_eq!(should_center_for_same_char("", '`'), None);
+        // More than 1 backtick before should NOT trigger (for code blocks)
+        assert_eq!(should_center_for_same_char("``", '`'), None);
+        assert_eq!(should_center_for_same_char("```", '`'), None);
 
         // Quote: 2 chars for centering
         assert_eq!(should_center_for_same_char("\"", '"'), Some(1));
         assert_eq!(should_center_for_same_char("", '"'), None);
+        assert_eq!(should_center_for_same_char("\"\"", '"'), None);
 
         // Single quote: 2 chars for centering
         assert_eq!(should_center_for_same_char("'", '\''), Some(1));
+        assert_eq!(should_center_for_same_char("''", '\''), None);
 
-        // Asterisk: 4 chars for centering
+        // Asterisk: 4 chars for centering (EXACTLY 3 before)
         assert_eq!(should_center_for_same_char("***", '*'), Some(2));
         assert_eq!(should_center_for_same_char("**", '*'), None);
         assert_eq!(should_center_for_same_char("*", '*'), None);
+        assert_eq!(should_center_for_same_char("****", '*'), None);
 
         // Tilde: 4 chars for centering
         assert_eq!(should_center_for_same_char("~~~", '~'), Some(2));
         assert_eq!(should_center_for_same_char("~~", '~'), None);
+        assert_eq!(should_center_for_same_char("~~~~", '~'), None);
     }
 }
