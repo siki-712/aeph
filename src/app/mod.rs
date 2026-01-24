@@ -1,6 +1,7 @@
 mod document;
 mod leader;
 mod state;
+mod typing;
 
 use anyhow::Result;
 use crossterm::{
@@ -462,7 +463,7 @@ fn run_app(
                         if last_edit.is_none() {
                             state.push_undo();
                         }
-                        state.doc_mut().insert_char(c);
+                        state.doc_mut().insert_char_with_auto_pair(c);
                         last_edit = Some(Instant::now());
                     }
                     (_, KeyCode::Enter) => {

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 
 use crate::markdown;
+use super::typing;
 
 pub struct Document {
     pub content: String,
@@ -232,6 +233,35 @@ impl Document {
         self.content.insert(offset, c);
         self.cursor_col += 1;
         self.modified = true;
+    }
+
+    /// Get up to n characters before the cursor on the current line
+    fn chars_before_cursor(&self, n: usize) -> String {
+        let line = self.current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let start = self.cursor_col.saturating_sub(n);
+        chars[start..self.cursor_col].iter().collect()
+    }
+
+    /// Insert a character with auto-pairing support
+    pub fn insert_char_with_auto_pair(&mut self, c: char) {
+        // Get chars before cursor BEFORE inserting (excludes the char we're about to type)
+        let chars_before_insert = self.chars_before_cursor(4);
+        let char_immediately_before = chars_before_insert.chars().last();
+
+        // Insert the character normally
+        self.insert_char(c);
+
+        // Check for bracket pairing (e.g., "(" followed by ")" -> move cursor back)
+        if let Some(move_back) = typing::should_center_for_bracket(char_immediately_before, c) {
+            self.cursor_col = self.cursor_col.saturating_sub(move_back);
+            return;
+        }
+
+        // Check for same-char centering (e.g., "``", "****")
+        if let Some(move_back) = typing::should_center_for_same_char(&chars_before_insert, c) {
+            self.cursor_col = self.cursor_col.saturating_sub(move_back);
+        }
     }
 
     pub fn insert_str(&mut self, s: &str) {
