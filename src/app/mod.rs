@@ -463,7 +463,11 @@ fn run_app(
                         if last_edit.is_none() {
                             state.push_undo();
                         }
-                        state.doc_mut().insert_char_with_auto_pair(c);
+                        if state.config.auto_pair {
+                            state.doc_mut().insert_char_with_auto_pair(c);
+                        } else {
+                            state.doc_mut().insert_char(c);
+                        }
                         last_edit = Some(Instant::now());
                     }
                     (_, KeyCode::Enter) => {
