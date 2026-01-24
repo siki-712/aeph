@@ -4,12 +4,14 @@ use std::time::Instant;
 
 use super::document::Document;
 use crate::storage;
+use crate::storage::Config;
 
 const MAX_DOCUMENTS: usize = 9;
 
 pub struct AppState {
     pub documents: Vec<Document>,
     pub current_doc: usize,
+    pub config: Config,
     pub show_help: bool,
     pub help_page: usize,
     pub show_file_picker: bool,
@@ -44,9 +46,13 @@ impl AppState {
         // Show logo on first launch (all documents empty)
         let all_empty = documents.iter().all(|d| d.content.is_empty());
 
+        // Load configuration
+        let config = storage::load_config();
+
         Ok(Self {
             documents,
             current_doc,
+            config,
             show_help: false,
             help_page: 0,
             show_file_picker: false,
