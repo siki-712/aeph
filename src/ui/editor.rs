@@ -216,16 +216,25 @@ impl Widget for EditorWidget<'_> {
             0
         };
 
-        // Draw grid background (dots at intersections)
-        let grid_style = Style::default().fg(theme::fg_muted());
+        // Draw grid background
+        // Terminal cells are taller than wide (~1:2 ratio), so use different spacing
+        let grid_style = Style::default().fg(theme::grid_line());
         let content_x = inner.x + line_num_width as u16;
         let content_width = inner.width.saturating_sub(line_num_width as u16);
+        let row_spacing = 1u16;  // Every row
+        let col_spacing = 2u16;  // Every 2 columns (to make squares)
+
         for row in 0..inner.height {
+            let is_horizontal_line = row % row_spacing == 0;
             for col in 0..content_width {
-                // Draw dot every 4 columns for grid effect
-                if col % 4 == 0 {
-                    buf.set_string(content_x + col, inner.y + row, "·", grid_style);
-                }
+                let is_vertical_line = col % col_spacing == 0;
+                let ch = match (is_horizontal_line, is_vertical_line) {
+                    (true, true) => "┼",
+                    (true, false) => "─",
+                    (false, true) => "│",
+                    (false, false) => continue,
+                };
+                buf.set_string(content_x + col, inner.y + row, ch, grid_style);
             }
         }
 
