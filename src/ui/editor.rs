@@ -38,8 +38,8 @@ impl<'a> EditorWidget<'a> {
     }
 
     fn highlight_line(&self, line: &str, in_code_block: bool) -> Line<'a> {
-        let base_style = Style::default();
-        let code_style = Style::default().add_modifier(Modifier::ITALIC);
+        let base_style = Style::default().fg(Color::White);
+        let code_style = Style::default().fg(Color::White).add_modifier(Modifier::ITALIC);
         let link_style = base_style.add_modifier(Modifier::UNDERLINED);
 
         let mut spans = Vec::new();
@@ -215,6 +215,19 @@ impl Widget for EditorWidget<'_> {
         } else {
             0
         };
+
+        // Draw grid background (dots at intersections)
+        let grid_style = Style::default().fg(theme::fg_muted());
+        let content_x = inner.x + line_num_width as u16;
+        let content_width = inner.width.saturating_sub(line_num_width as u16);
+        for row in 0..inner.height {
+            for col in 0..content_width {
+                // Draw dot every 4 columns for grid effect
+                if col % 4 == 0 {
+                    buf.set_string(content_x + col, inner.y + row, "·", grid_style);
+                }
+            }
+        }
 
         // Track code block state for all lines up to visible area
         let mut in_code_block = false;

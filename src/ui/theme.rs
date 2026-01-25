@@ -55,6 +55,7 @@ struct ColorsConfig {
     modal_bg: Option<String>,
     modal_fg: Option<String>,
     modal_fg_muted: Option<String>,
+    grid_line: Option<String>,
 }
 
 pub struct Theme {
@@ -69,6 +70,7 @@ pub struct Theme {
     pub modal_bg: Color,
     pub modal_fg: Color,
     pub modal_fg_muted: Color,
+    pub grid_line: Color,
 }
 
 impl Theme {
@@ -109,6 +111,9 @@ impl Theme {
             modal_fg_muted: config.colors.modal_fg_muted
                 .and_then(|s| parse_color(&s))
                 .unwrap_or(Color::Rgb(120, 120, 120)),
+            grid_line: config.colors.grid_line
+                .and_then(|s| parse_color(&s))
+                .unwrap_or(Color::Rgb(80, 80, 85)),
         }
     }
 }
@@ -134,3 +139,4 @@ pub fn cursor_fg() -> Color { THEME.cursor_fg }
 pub fn modal_bg() -> Color { THEME.modal_bg }
 pub fn modal_fg() -> Color { THEME.modal_fg }
 pub fn modal_fg_muted() -> Color { THEME.modal_fg_muted }
+pub fn grid_line() -> Color { THEME.grid_line }
