@@ -37,6 +37,7 @@ impl HelpWidget {
                 ("Ctrl+T", "Toggle task under cursor"),
                 ("Ctrl+N", "New task"),
                 ("Ctrl+O", "Open document picker"),
+                ("Ctrl+Shift+←/→", "Switch document"),
                 ("Ctrl+G", "Go to line"),
                 ("Ctrl+B", "Toggle grid style"),
                 ("Ctrl+H / F1", "Toggle help"),
