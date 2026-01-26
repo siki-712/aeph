@@ -298,8 +298,13 @@ impl Widget for EditorWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let inner = area;
 
+        // Text area padding (grid is drawn full area, text has padding)
+        const PADDING_TOP: u16 = 2;
+        const PADDING_LEFT: u16 = 1;
+        const PADDING_RIGHT: u16 = 1;
+
         let lines: Vec<&str> = self.content.lines().collect();
-        let visible_height = inner.height as usize;
+        let visible_height = inner.height.saturating_sub(PADDING_TOP) as usize;
         let total_lines = lines.len();
 
         // Calculate line number width
@@ -311,16 +316,16 @@ impl Widget for EditorWidget<'_> {
 
         // Calculate body centering offset (text only, grid stays full width)
         const MAX_BODY_WIDTH: u16 = 80;
-        let available_width = inner.width.saturating_sub(line_num_width as u16);
-        let body_center_offset = if self.text_align == TextAlign::Center && available_width > MAX_BODY_WIDTH {
-            (available_width - MAX_BODY_WIDTH) / 2
+        let text_area_width = inner.width.saturating_sub(line_num_width as u16 + PADDING_LEFT + PADDING_RIGHT);
+        let body_center_offset = if self.text_align == TextAlign::Center && text_area_width > MAX_BODY_WIDTH {
+            (text_area_width - MAX_BODY_WIDTH) / 2
         } else {
             0
         };
 
-        // Draw grid background (always full width)
-        let grid_x = inner.x + line_num_width as u16;
-        let grid_width = available_width;
+        // Draw grid background (always full width, no padding)
+        let grid_x = inner.x;
+        let grid_width = inner.width;
 
         if self.grid_style != GridStyle::None {
             let style = Style::default().fg(theme::grid_line());
@@ -372,7 +377,7 @@ impl Widget for EditorWidget<'_> {
 
             let line = lines[line_idx];
             let is_cursor_line = line_idx == self.cursor_line;
-            let y = inner.y + i as u16;
+            let y = inner.y + PADDING_TOP + i as u16;
 
             // Check if this line starts/ends a code block
             let is_fence = line.trim_start().starts_with("```");
@@ -389,15 +394,15 @@ impl Widget for EditorWidget<'_> {
                 } else {
                     Style::default().fg(theme::fg_muted())
                 };
-                buf.set_string(inner.x, y, &line_num, num_style);
+                buf.set_string(inner.x + PADDING_LEFT, y, &line_num, num_style);
             }
 
             // Draw line content (fence lines and content inside code block)
             let show_as_code = is_fence || was_in_code_block;
             let styled_line = self.highlight_line(line, show_as_code);
-            let line_content_x = inner.x + line_num_width as u16 + body_center_offset;
+            let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
 
-            buf.set_line(line_content_x, y, &styled_line, available_width);
+            buf.set_line(line_content_x, y, &styled_line, text_area_width);
 
             // Draw cursor
             if is_cursor_line {
