@@ -439,8 +439,12 @@ fn run_app(
                                             }
                                         }
                                         leader::LeaderCommand::Quit => {
-                                            // Save last opened document for next session
-                                            let _ = storage::save_last_doc(state.current_doc);
+                                            // Save session for next launch
+                                            let _ = storage::save_session(&storage::Session {
+                                                last_doc: state.current_doc,
+                                                grid_style: state.grid_style.to_u8(),
+                                                text_align: state.text_align.to_u8(),
+                                            });
                                             return Ok(());
                                         }
                                         leader::LeaderCommand::SwitchDoc(idx) => {
@@ -551,8 +555,12 @@ fn run_app(
         }
     }
 
-    // Save last opened document for next session
-    let _ = storage::save_last_doc(state.current_doc);
+    // Save session for next launch
+    let _ = storage::save_session(&storage::Session {
+        last_doc: state.current_doc,
+        grid_style: state.grid_style.to_u8(),
+        text_align: state.text_align.to_u8(),
+    });
 
     Ok(())
 }

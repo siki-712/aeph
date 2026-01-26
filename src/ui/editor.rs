@@ -32,6 +32,22 @@ impl GridStyle {
             GridStyle::Lines => "Grid: Lines",
         }
     }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            GridStyle::None => 0,
+            GridStyle::Dots => 1,
+            GridStyle::Lines => 2,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            0 => GridStyle::None,
+            1 => GridStyle::Dots,
+            _ => GridStyle::Lines,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -53,6 +69,20 @@ impl TextAlign {
         match self {
             TextAlign::Left => "Body: Full",
             TextAlign::Center => "Body: Center",
+        }
+    }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            TextAlign::Left => 0,
+            TextAlign::Center => 1,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => TextAlign::Center,
+            _ => TextAlign::Left,
         }
     }
 }

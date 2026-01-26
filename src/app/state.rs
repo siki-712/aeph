@@ -36,6 +36,9 @@ impl AppState {
             documents.push(Document::new(Some(path))?);
         }
 
+        // Load session data
+        let session = storage::load_session();
+
         // Determine starting document
         let current_doc = if let Some(path) = file {
             // If a specific file was provided, replace the first document
@@ -43,7 +46,7 @@ impl AppState {
             0
         } else {
             // Restore last opened document
-            storage::load_last_doc().min(MAX_DOCUMENTS - 1)
+            session.last_doc.min(MAX_DOCUMENTS - 1)
         };
 
         // Show logo on first launch (all documents empty)
@@ -65,8 +68,8 @@ impl AppState {
             goto_input: None,
             notification: None,
             leader_buffer: None,
-            grid_style: GridStyle::default(),
-            text_align: TextAlign::default(),
+            grid_style: GridStyle::from_u8(session.grid_style),
+            text_align: TextAlign::from_u8(session.text_align),
         })
     }
 
