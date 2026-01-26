@@ -119,7 +119,8 @@ fn run_app(
             .scroll_offset(doc.scroll_offset)
             .show_line_numbers(state.goto_input.is_some())
             .grid_style(state.grid_style)
-            .text_align(state.text_align);
+            .text_align(state.text_align)
+            .quote_seed(state.quote_seed.wrapping_add(state.current_doc as u64));
 
             frame.render_widget(editor, chunks[0]);
 

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use super::document::Document;
 use crate::storage;
@@ -24,6 +24,7 @@ pub struct AppState {
     pub leader_buffer: Option<(String, Instant)>,
     pub grid_style: GridStyle,
     pub text_align: TextAlign,
+    pub quote_seed: u64,
 }
 
 impl AppState {
@@ -55,6 +56,12 @@ impl AppState {
         // Load configuration
         let config = storage::load_config();
 
+        // Generate random seed from current time
+        let quote_seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
         Ok(Self {
             documents,
             current_doc,
@@ -70,6 +77,7 @@ impl AppState {
             leader_buffer: None,
             grid_style: GridStyle::from_u8(session.grid_style),
             text_align: TextAlign::from_u8(session.text_align),
+            quote_seed,
         })
     }
 

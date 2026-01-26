@@ -8,18 +8,18 @@ use ratatui::{
 
 use super::theme;
 
-/// Placeholder quotes shown when document is empty
+/// Placeholder quotes shown when document is empty (Unix Philosophy - universal)
 const PLACEHOLDER_QUOTES: &[&str] = &[
-    "Fill your paper with the breathings of your heart.",
-    "The best way to predict the future is to implement it.",
-    "Code is like humor. When you have to explain it, it's bad.",
-    "First, solve the problem. Then, write the code.",
-    "Simplicity is the soul of efficiency.",
+    "Do one thing and do it well.",
+    "Keep it simple.",
+    "Silence is golden.",
+    "Small is beautiful.",
+    "Build a prototype as soon as possible.",
+    "Choose simplicity over efficiency.",
     "Make it work, make it right, make it fast.",
-    "Programs must be written for people to read.",
-    "The only way to go fast is to go well.",
-    "Talk is cheap. Show me the code.",
-    "Any fool can write code that a computer can understand.",
+    "Worse is better.",
+    "When in doubt, use brute force.",
+    "Rule of Diversity: Distrust all claims for the one true way.",
 ];
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -109,6 +109,7 @@ pub struct EditorWidget<'a> {
     show_line_numbers: bool,
     grid_style: GridStyle,
     text_align: TextAlign,
+    quote_seed: u64,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -121,6 +122,7 @@ impl<'a> EditorWidget<'a> {
             show_line_numbers: false,
             grid_style: GridStyle::default(),
             text_align: TextAlign::default(),
+            quote_seed: 0,
         }
     }
 
@@ -141,6 +143,11 @@ impl<'a> EditorWidget<'a> {
 
     pub fn text_align(mut self, align: TextAlign) -> Self {
         self.text_align = align;
+        self
+    }
+
+    pub fn quote_seed(mut self, seed: u64) -> Self {
+        self.quote_seed = seed;
         self
     }
 
@@ -378,8 +385,8 @@ impl Widget for EditorWidget<'_> {
 
         // Show placeholder quote when document is empty
         if self.content.is_empty() {
-            // Simple hash based on area dimensions for stable random selection
-            let quote_idx = ((inner.width as usize) * 7 + (inner.height as usize) * 13) % PLACEHOLDER_QUOTES.len();
+            // Select quote based on seed (changes each launch)
+            let quote_idx = (self.quote_seed as usize) % PLACEHOLDER_QUOTES.len();
             let quote = PLACEHOLDER_QUOTES[quote_idx];
             let placeholder_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
             let placeholder_y = inner.y + PADDING_TOP;
