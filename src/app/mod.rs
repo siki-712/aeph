@@ -1,6 +1,7 @@
 mod document;
 mod leader;
 mod state;
+mod typing;
 
 use anyhow::Result;
 use crossterm::{
@@ -116,7 +117,8 @@ fn run_app(
                 doc.cursor_col,
             )
             .scroll_offset(doc.scroll_offset)
-            .show_line_numbers(state.goto_input.is_some());
+            .show_line_numbers(state.goto_input.is_some())
+            .grid_style(state.grid_style);
 
             frame.render_widget(editor, chunks[0]);
 
@@ -321,6 +323,12 @@ fn run_app(
                         state.show_logo = !state.show_logo;
                     }
 
+                    // Toggle grid style
+                    (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
+                        state.grid_style = state.grid_style.next();
+                        state.notification = Some(state.grid_style.name().to_string());
+                    }
+
                     // Clear document
                     (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
                         state.clear();
@@ -462,7 +470,11 @@ fn run_app(
                         if last_edit.is_none() {
                             state.push_undo();
                         }
-                        state.doc_mut().insert_char(c);
+                        if state.config.auto_pair {
+                            state.doc_mut().insert_char_with_auto_pair(c);
+                        } else {
+                            state.doc_mut().insert_char(c);
+                        }
                         last_edit = Some(Instant::now());
                     }
                     (_, KeyCode::Enter) => {

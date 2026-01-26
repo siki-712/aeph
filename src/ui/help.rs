@@ -38,6 +38,7 @@ impl HelpWidget {
                 ("Ctrl+N", "New task"),
                 ("Ctrl+O", "Open document picker"),
                 ("Ctrl+G", "Go to line"),
+                ("Ctrl+B", "Toggle grid style"),
                 ("Ctrl+H / F1", "Toggle help"),
                 ("↑/↓/←/→", "Move cursor"),
                 ("PgUp/PgDn", "Scroll page"),

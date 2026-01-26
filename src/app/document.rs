@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 
 use crate::markdown;
+use super::typing;
 
 pub struct Document {
     pub content: String,
@@ -232,6 +233,60 @@ impl Document {
         self.content.insert(offset, c);
         self.cursor_col += 1;
         self.modified = true;
+    }
+
+    /// Get up to n characters before the cursor on the current line
+    fn chars_before_cursor(&self, n: usize) -> String {
+        let line = self.current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let start = self.cursor_col.saturating_sub(n);
+        chars[start..self.cursor_col].iter().collect()
+    }
+
+    /// Get the character at the cursor position (if any)
+    fn char_at_cursor(&self) -> Option<char> {
+        let line = self.current_line();
+        line.chars().nth(self.cursor_col)
+    }
+
+    /// Move cursor past consecutive occurrences of the given character
+    fn move_past_char(&mut self, c: char) {
+        let line = self.current_line();
+        let chars: Vec<char> = line.chars().collect();
+        while self.cursor_col < chars.len() && chars[self.cursor_col] == c {
+            self.cursor_col += 1;
+        }
+    }
+
+    /// Insert a character with auto-pairing support
+    pub fn insert_char_with_auto_pair(&mut self, c: char) {
+        // Get context before inserting
+        let chars_before_insert = self.chars_before_cursor(4);
+        let char_immediately_before = chars_before_insert.chars().last();
+        let char_at_cursor = self.char_at_cursor();
+
+        // Escape mechanism: if we're inside a pair of the same character (char before AND after
+        // are the same as the typed char), move cursor past the sequence first, then insert.
+        // This allows typing ``` after `` without getting stuck in the middle.
+        if char_immediately_before == Some(c) && char_at_cursor == Some(c) {
+            self.move_past_char(c);
+            self.insert_char(c);
+            return; // No centering after escape
+        }
+
+        // Insert the character normally
+        self.insert_char(c);
+
+        // Check for bracket pairing (e.g., "(" followed by ")" -> move cursor back)
+        if let Some(move_back) = typing::should_center_for_bracket(char_immediately_before, c) {
+            self.cursor_col = self.cursor_col.saturating_sub(move_back);
+            return;
+        }
+
+        // Check for same-char centering (e.g., "``", "****")
+        if let Some(move_back) = typing::should_center_for_same_char(&chars_before_insert, c) {
+            self.cursor_col = self.cursor_col.saturating_sub(move_back);
+        }
     }
 
     pub fn insert_str(&mut self, s: &str) {

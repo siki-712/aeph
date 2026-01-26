@@ -57,6 +57,13 @@ Vim-style commands with `:` prefix (500ms timeout):
 | `:p` | Paste below cursor |
 | `:1`-`:9` | Switch to document 1-9 |
 
+## Display
+
+| Key | Action |
+|-----|--------|
+| Ctrl+B | Toggle grid style (Off → Dots → Lines) |
+| Ctrl+L | Toggle logo |
+
 ## Formatting
 
 - [ ] Format markdown with `Ctrl+F`
@@ -74,7 +81,35 @@ Press Enter on a list item to continue:
 > Blockquotes also continue
 > when you press Enter
 
+### Auto-Pairing
+
+Brackets and quotes auto-pair with cursor centering:
+
+| Input | Result | Cursor Position |
+|-------|--------|-----------------|
+| `()` | `()` | `(\|)` |
+| `[]` | `[]` | `[\|]` |
+| `{}` | `{}` | `{\|}` |
+| ` `` ` | ` `` ` | `` `\|` `` |
+| `""` | `""` | `"\|"` |
+| `''` | `''` | `'\|'` |
+| `****` | `****` | `**\|**` |
+| `~~~~` | `~~~~` | `~~\|~~` |
+
+Type the same character again to escape from the pair and continue typing.
+
 ## Customization
+
+### Configuration File
+
+Create `~/.config/aeph/config.toml` to customize behavior:
+
+```toml
+# Enable/disable auto-pairing for brackets and quotes (default: true)
+auto_pair = true
+```
+
+### Environment Variables
 
 Set colors via environment variables:
 

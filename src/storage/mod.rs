@@ -1,7 +1,26 @@
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+
+/// Application configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    /// Enable auto-pairing for brackets and quotes
+    #[serde(default = "default_true")]
+    pub auto_pair: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self { auto_pair: true }
+    }
+}
 
 fn get_project_dirs() -> Option<ProjectDirs> {
     ProjectDirs::from("com", "ephe", "aeph")
@@ -15,6 +34,26 @@ fn get_data_dir() -> Result<PathBuf> {
 
 pub fn get_config_path() -> Option<PathBuf> {
     get_project_dirs().map(|dirs| dirs.config_dir().join("config.toml"))
+}
+
+/// Load configuration from file, or return default if not found
+pub fn load_config() -> Config {
+    get_config_path()
+        .and_then(|p| fs::read_to_string(p).ok())
+        .and_then(|s| toml::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// Save configuration to file
+#[allow(dead_code)]
+pub fn save_config(config: &Config) -> Result<()> {
+    let path = get_config_path().context("Failed to determine config path")?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let content = toml::to_string_pretty(config)?;
+    fs::write(&path, content)?;
+    Ok(())
 }
 
 pub fn get_paper_path(index: usize) -> Result<PathBuf> {
