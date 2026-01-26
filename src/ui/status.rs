@@ -126,7 +126,7 @@ impl Widget for StatusBar<'_> {
             self.cursor_col + 1,
             self.total_lines
         );
-        let app_name = "aeph ";
+        let app_name = concat!("aeph v", env!("CARGO_PKG_VERSION"), " ");
 
         buf.set_line(area.x, area.y, &left, area.width);
 
