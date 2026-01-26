@@ -118,7 +118,9 @@ fn run_app(
             )
             .scroll_offset(doc.scroll_offset)
             .show_line_numbers(state.goto_input.is_some())
-            .grid_style(state.grid_style);
+            .grid_style(state.grid_style)
+            .text_align(state.text_align)
+            .quote_seed(state.quote_seed.wrapping_add(state.current_doc as u64));
 
             frame.render_widget(editor, chunks[0]);
 
@@ -329,6 +331,12 @@ fn run_app(
                         state.notification = Some(state.grid_style.name().to_string());
                     }
 
+                    // Toggle text alignment
+                    (m, KeyCode::Char('b') | KeyCode::Char('B')) if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) => {
+                        state.text_align = state.text_align.next();
+                        state.notification = Some(state.text_align.name().to_string());
+                    }
+
                     // Switch to previous document
                     (m, KeyCode::Left) if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) => {
                         if state.current_doc > 0 {
@@ -432,8 +440,12 @@ fn run_app(
                                             }
                                         }
                                         leader::LeaderCommand::Quit => {
-                                            // Save last opened document for next session
-                                            let _ = storage::save_last_doc(state.current_doc);
+                                            // Save session for next launch
+                                            let _ = storage::save_session(&storage::Session {
+                                                last_doc: state.current_doc,
+                                                grid_style: state.grid_style.to_u8(),
+                                                text_align: state.text_align.to_u8(),
+                                            });
                                             return Ok(());
                                         }
                                         leader::LeaderCommand::SwitchDoc(idx) => {
@@ -544,8 +556,12 @@ fn run_app(
         }
     }
 
-    // Save last opened document for next session
-    let _ = storage::save_last_doc(state.current_doc);
+    // Save session for next launch
+    let _ = storage::save_session(&storage::Session {
+        last_doc: state.current_doc,
+        grid_style: state.grid_style.to_u8(),
+        text_align: state.text_align.to_u8(),
+    });
 
     Ok(())
 }

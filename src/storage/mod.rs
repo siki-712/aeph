@@ -69,18 +69,31 @@ fn get_session_path() -> Result<PathBuf> {
     Ok(data_dir.join("session.json"))
 }
 
-/// Save the last opened document index
-pub fn save_last_doc(index: usize) -> Result<()> {
+/// Session data persisted between app launches
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Session {
+    #[serde(default)]
+    pub last_doc: usize,
+    #[serde(default)]
+    pub grid_style: u8,
+    #[serde(default)]
+    pub text_align: u8,
+}
+
+/// Save session data
+pub fn save_session(session: &Session) -> Result<()> {
     let path = get_session_path()?;
-    fs::write(&path, index.to_string())?;
+    let content = serde_json::to_string(session)?;
+    fs::write(&path, content)?;
     Ok(())
 }
 
-/// Load the last opened document index (returns 0 if not found)
-pub fn load_last_doc() -> usize {
+/// Load session data
+pub fn load_session() -> Session {
     get_session_path()
         .ok()
         .and_then(|p| fs::read_to_string(p).ok())
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(0)
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
 }
+

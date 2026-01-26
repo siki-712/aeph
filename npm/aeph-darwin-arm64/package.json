@@ -1,6 +1,6 @@
 {
   "name": "aeph-darwin-arm64",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "aeph binary for macOS ARM64",
   "repository": {
     "type": "git",

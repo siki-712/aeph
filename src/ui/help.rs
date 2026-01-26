@@ -40,6 +40,7 @@ impl HelpWidget {
                 ("Ctrl+Shift+←/→", "Switch document"),
                 ("Ctrl+G", "Go to line"),
                 ("Ctrl+B", "Toggle grid style"),
+                ("Ctrl+Shift+B", "Toggle body centering"),
                 ("Ctrl+H / F1", "Toggle help"),
                 ("↑/↓/←/→", "Move cursor"),
                 ("PgUp/PgDn", "Scroll page"),

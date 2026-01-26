@@ -1,11 +1,11 @@
 use anyhow::Result;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use super::document::Document;
 use crate::storage;
 use crate::storage::Config;
-use crate::ui::GridStyle;
+use crate::ui::{GridStyle, TextAlign};
 
 const MAX_DOCUMENTS: usize = 9;
 
@@ -23,6 +23,8 @@ pub struct AppState {
     pub notification: Option<String>,
     pub leader_buffer: Option<(String, Instant)>,
     pub grid_style: GridStyle,
+    pub text_align: TextAlign,
+    pub quote_seed: u64,
 }
 
 impl AppState {
@@ -35,6 +37,9 @@ impl AppState {
             documents.push(Document::new(Some(path))?);
         }
 
+        // Load session data
+        let session = storage::load_session();
+
         // Determine starting document
         let current_doc = if let Some(path) = file {
             // If a specific file was provided, replace the first document
@@ -42,7 +47,7 @@ impl AppState {
             0
         } else {
             // Restore last opened document
-            storage::load_last_doc().min(MAX_DOCUMENTS - 1)
+            session.last_doc.min(MAX_DOCUMENTS - 1)
         };
 
         // Show logo on first launch (all documents empty)
@@ -50,6 +55,12 @@ impl AppState {
 
         // Load configuration
         let config = storage::load_config();
+
+        // Generate random seed from current time
+        let quote_seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
 
         Ok(Self {
             documents,
@@ -64,7 +75,9 @@ impl AppState {
             goto_input: None,
             notification: None,
             leader_buffer: None,
-            grid_style: GridStyle::default(),
+            grid_style: GridStyle::from_u8(session.grid_style),
+            text_align: TextAlign::from_u8(session.text_align),
+            quote_seed,
         })
     }
 

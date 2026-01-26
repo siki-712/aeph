@@ -8,6 +8,20 @@ use ratatui::{
 
 use super::theme;
 
+/// Placeholder quotes shown when document is empty (Unix Philosophy - universal)
+const PLACEHOLDER_QUOTES: &[&str] = &[
+    "Do one thing and do it well.",
+    "Keep it simple.",
+    "Silence is golden.",
+    "Small is beautiful.",
+    "Build a prototype as soon as possible.",
+    "Choose simplicity over efficiency.",
+    "Make it work, make it right, make it fast.",
+    "Worse is better.",
+    "When in doubt, use brute force.",
+    "Rule of Diversity: Distrust all claims for the one true way.",
+];
+
 #[derive(Clone, Copy, Default, PartialEq)]
 pub enum GridStyle {
     None,
@@ -32,6 +46,59 @@ impl GridStyle {
             GridStyle::Lines => "Grid: Lines",
         }
     }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            GridStyle::None => 0,
+            GridStyle::Dots => 1,
+            GridStyle::Lines => 2,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            0 => GridStyle::None,
+            1 => GridStyle::Dots,
+            _ => GridStyle::Lines,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+}
+
+impl TextAlign {
+    pub fn next(self) -> Self {
+        match self {
+            TextAlign::Left => TextAlign::Center,
+            TextAlign::Center => TextAlign::Left,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TextAlign::Left => "Body: Full",
+            TextAlign::Center => "Body: Center",
+        }
+    }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            TextAlign::Left => 0,
+            TextAlign::Center => 1,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => TextAlign::Center,
+            _ => TextAlign::Left,
+        }
+    }
 }
 
 pub struct EditorWidget<'a> {
@@ -41,6 +108,8 @@ pub struct EditorWidget<'a> {
     scroll_offset: usize,
     show_line_numbers: bool,
     grid_style: GridStyle,
+    text_align: TextAlign,
+    quote_seed: u64,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -52,6 +121,8 @@ impl<'a> EditorWidget<'a> {
             scroll_offset: 0,
             show_line_numbers: false,
             grid_style: GridStyle::default(),
+            text_align: TextAlign::default(),
+            quote_seed: 0,
         }
     }
 
@@ -67,6 +138,16 @@ impl<'a> EditorWidget<'a> {
 
     pub fn grid_style(mut self, style: GridStyle) -> Self {
         self.grid_style = style;
+        self
+    }
+
+    pub fn text_align(mut self, align: TextAlign) -> Self {
+        self.text_align = align;
+        self
+    }
+
+    pub fn quote_seed(mut self, seed: u64) -> Self {
+        self.quote_seed = seed;
         self
     }
 
@@ -238,8 +319,13 @@ impl Widget for EditorWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let inner = area;
 
+        // Text area padding (grid is drawn full area, text has padding)
+        const PADDING_TOP: u16 = 2;
+        const PADDING_LEFT: u16 = 1;
+        const PADDING_RIGHT: u16 = 1;
+
         let lines: Vec<&str> = self.content.lines().collect();
-        let visible_height = inner.height as usize;
+        let visible_height = inner.height.saturating_sub(PADDING_TOP) as usize;
         let total_lines = lines.len();
 
         // Calculate line number width
@@ -249,9 +335,18 @@ impl Widget for EditorWidget<'_> {
             0
         };
 
-        // Draw grid background
-        let content_x = inner.x + line_num_width as u16;
-        let content_width = inner.width.saturating_sub(line_num_width as u16);
+        // Calculate body centering offset (text only, grid stays full width)
+        const MAX_BODY_WIDTH: u16 = 80;
+        let text_area_width = inner.width.saturating_sub(line_num_width as u16 + PADDING_LEFT + PADDING_RIGHT);
+        let body_center_offset = if self.text_align == TextAlign::Center && text_area_width > MAX_BODY_WIDTH {
+            (text_area_width - MAX_BODY_WIDTH) / 2
+        } else {
+            0
+        };
+
+        // Draw grid background (always full width, no padding)
+        let grid_x = inner.x;
+        let grid_width = inner.width;
 
         if self.grid_style != GridStyle::None {
             let style = Style::default().fg(theme::grid_line());
@@ -260,8 +355,8 @@ impl Widget for EditorWidget<'_> {
                 GridStyle::Dots => {
                     // Draw dots every 4 columns
                     for row in 0..inner.height {
-                        for col in (0..content_width).step_by(4) {
-                            buf.set_string(content_x + col, inner.y + row, "·", style);
+                        for col in (0..grid_width).step_by(4) {
+                            buf.set_string(grid_x + col, inner.y + row, "·", style);
                         }
                     }
                 }
@@ -272,7 +367,7 @@ impl Widget for EditorWidget<'_> {
 
                     for row in 0..inner.height {
                         let is_horizontal_line = row % row_spacing == 0;
-                        for col in 0..content_width {
+                        for col in 0..grid_width {
                             let is_vertical_line = col % col_spacing == 0;
                             let ch = match (is_horizontal_line, is_vertical_line) {
                                 (true, true) => "┼",
@@ -280,12 +375,23 @@ impl Widget for EditorWidget<'_> {
                                 (false, true) => "│",
                                 (false, false) => continue,
                             };
-                            buf.set_string(content_x + col, inner.y + row, ch, style);
+                            buf.set_string(grid_x + col, inner.y + row, ch, style);
                         }
                     }
                 }
                 GridStyle::None => {}
             }
+        }
+
+        // Show placeholder quote when document is empty
+        if self.content.is_empty() {
+            // Select quote based on seed (changes each launch)
+            let quote_idx = (self.quote_seed as usize) % PLACEHOLDER_QUOTES.len();
+            let quote = PLACEHOLDER_QUOTES[quote_idx];
+            let placeholder_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
+            let placeholder_y = inner.y + PADDING_TOP;
+            let placeholder_style = Style::default().fg(Color::Rgb(140, 140, 140)).add_modifier(Modifier::ITALIC);
+            buf.set_string(placeholder_x, placeholder_y, quote, placeholder_style);
         }
 
         // Track code block state for all lines up to visible area
@@ -303,7 +409,7 @@ impl Widget for EditorWidget<'_> {
 
             let line = lines[line_idx];
             let is_cursor_line = line_idx == self.cursor_line;
-            let y = inner.y + i as u16;
+            let y = inner.y + PADDING_TOP + i as u16;
 
             // Check if this line starts/ends a code block
             let is_fence = line.trim_start().starts_with("```");
@@ -320,14 +426,15 @@ impl Widget for EditorWidget<'_> {
                 } else {
                     Style::default().fg(theme::fg_muted())
                 };
-                buf.set_string(inner.x, y, &line_num, num_style);
+                buf.set_string(inner.x + PADDING_LEFT, y, &line_num, num_style);
             }
 
             // Draw line content (fence lines and content inside code block)
             let show_as_code = is_fence || was_in_code_block;
             let styled_line = self.highlight_line(line, show_as_code);
-            let content_x = inner.x + line_num_width as u16;
-            buf.set_line(content_x, y, &styled_line, inner.width.saturating_sub(line_num_width as u16));
+            let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
+
+            buf.set_line(line_content_x, y, &styled_line, text_area_width);
 
             // Draw cursor
             if is_cursor_line {
@@ -337,7 +444,7 @@ impl Widget for EditorWidget<'_> {
                     .take(self.cursor_col)
                     .map(|c| c.width().unwrap_or(0))
                     .sum();
-                let cursor_x = content_x + display_col as u16;
+                let cursor_x = line_content_x + display_col as u16;
                 if cursor_x < inner.x + inner.width {
                     // Get the character at cursor position (or space if at end of line)
                     let cursor_char = line.chars().nth(self.cursor_col).unwrap_or(' ');
