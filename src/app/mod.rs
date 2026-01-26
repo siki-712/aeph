@@ -329,6 +329,20 @@ fn run_app(
                         state.notification = Some(state.grid_style.name().to_string());
                     }
 
+                    // Switch to previous document
+                    (m, KeyCode::Left) if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) => {
+                        if state.current_doc > 0 {
+                            state.switch_to(state.current_doc - 1);
+                        }
+                    }
+
+                    // Switch to next document
+                    (m, KeyCode::Right) if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) => {
+                        if state.current_doc < state.documents.len() - 1 {
+                            state.switch_to(state.current_doc + 1);
+                        }
+                    }
+
                     // Clear document
                     (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
                         state.clear();

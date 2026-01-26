@@ -43,6 +43,7 @@ Manage up to 9 documents
 | Key | Action |
 |-----|--------|
 | Ctrl+O | Open document picker |
+| Ctrl+Shift+←/→ | Switch to prev/next document |
 | 1-9 | Quick switch in picker |
 
 ## Leader Commands
