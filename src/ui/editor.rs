@@ -8,6 +8,20 @@ use ratatui::{
 
 use super::theme;
 
+/// Placeholder quotes shown when document is empty
+const PLACEHOLDER_QUOTES: &[&str] = &[
+    "Fill your paper with the breathings of your heart.",
+    "The best way to predict the future is to implement it.",
+    "Code is like humor. When you have to explain it, it's bad.",
+    "First, solve the problem. Then, write the code.",
+    "Simplicity is the soul of efficiency.",
+    "Make it work, make it right, make it fast.",
+    "Programs must be written for people to read.",
+    "The only way to go fast is to go well.",
+    "Talk is cheap. Show me the code.",
+    "Any fool can write code that a computer can understand.",
+];
+
 #[derive(Clone, Copy, Default, PartialEq)]
 pub enum GridStyle {
     None,
@@ -360,6 +374,17 @@ impl Widget for EditorWidget<'_> {
                 }
                 GridStyle::None => {}
             }
+        }
+
+        // Show placeholder quote when document is empty
+        if self.content.is_empty() {
+            // Simple hash based on area dimensions for stable random selection
+            let quote_idx = ((inner.width as usize) * 7 + (inner.height as usize) * 13) % PLACEHOLDER_QUOTES.len();
+            let quote = PLACEHOLDER_QUOTES[quote_idx];
+            let placeholder_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
+            let placeholder_y = inner.y + PADDING_TOP;
+            let placeholder_style = Style::default().fg(Color::Rgb(140, 140, 140)).add_modifier(Modifier::ITALIC);
+            buf.set_string(placeholder_x, placeholder_y, quote, placeholder_style);
         }
 
         // Track code block state for all lines up to visible area
