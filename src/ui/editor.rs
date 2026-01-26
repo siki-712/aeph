@@ -8,12 +8,39 @@ use ratatui::{
 
 use super::theme;
 
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum GridStyle {
+    None,
+    Dots,
+    #[default]
+    Lines,
+}
+
+impl GridStyle {
+    pub fn next(self) -> Self {
+        match self {
+            GridStyle::None => GridStyle::Dots,
+            GridStyle::Dots => GridStyle::Lines,
+            GridStyle::Lines => GridStyle::None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            GridStyle::None => "Grid: Off",
+            GridStyle::Dots => "Grid: Dots",
+            GridStyle::Lines => "Grid: Lines",
+        }
+    }
+}
+
 pub struct EditorWidget<'a> {
     content: &'a str,
     cursor_line: usize,
     cursor_col: usize,
     scroll_offset: usize,
     show_line_numbers: bool,
+    grid_style: GridStyle,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -24,6 +51,7 @@ impl<'a> EditorWidget<'a> {
             cursor_col,
             scroll_offset: 0,
             show_line_numbers: false,
+            grid_style: GridStyle::default(),
         }
     }
 
@@ -37,9 +65,14 @@ impl<'a> EditorWidget<'a> {
         self
     }
 
+    pub fn grid_style(mut self, style: GridStyle) -> Self {
+        self.grid_style = style;
+        self
+    }
+
     fn highlight_line(&self, line: &str, in_code_block: bool) -> Line<'a> {
         let base_style = Style::default().fg(Color::White);
-        let code_style = Style::default().fg(Color::White).add_modifier(Modifier::ITALIC);
+        let code_style = base_style.add_modifier(Modifier::ITALIC);
         let link_style = base_style.add_modifier(Modifier::UNDERLINED);
 
         let mut spans = Vec::new();
@@ -106,7 +139,7 @@ impl<'a> EditorWidget<'a> {
 
     /// Parse text and highlight markdown links [text](url), inline code `code`, and raw URLs
     fn parse_with_links(text: &str, base_style: Style, link_style: Style, spans: &mut Vec<Span<'a>>) {
-        let code_style = Style::default().add_modifier(Modifier::ITALIC);
+        let code_style = base_style.add_modifier(Modifier::ITALIC);
 
         let mut remaining = text;
 
@@ -217,24 +250,41 @@ impl Widget for EditorWidget<'_> {
         };
 
         // Draw grid background
-        // Terminal cells are taller than wide (~1:2 ratio), so use different spacing
-        let grid_style = Style::default().fg(theme::grid_line());
         let content_x = inner.x + line_num_width as u16;
         let content_width = inner.width.saturating_sub(line_num_width as u16);
-        let row_spacing = 1u16;  // Every row
-        let col_spacing = 2u16;  // Every 2 columns (to make squares)
 
-        for row in 0..inner.height {
-            let is_horizontal_line = row % row_spacing == 0;
-            for col in 0..content_width {
-                let is_vertical_line = col % col_spacing == 0;
-                let ch = match (is_horizontal_line, is_vertical_line) {
-                    (true, true) => "┼",
-                    (true, false) => "─",
-                    (false, true) => "│",
-                    (false, false) => continue,
-                };
-                buf.set_string(content_x + col, inner.y + row, ch, grid_style);
+        if self.grid_style != GridStyle::None {
+            let style = Style::default().fg(theme::grid_line());
+
+            match self.grid_style {
+                GridStyle::Dots => {
+                    // Draw dots every 4 columns
+                    for row in 0..inner.height {
+                        for col in (0..content_width).step_by(4) {
+                            buf.set_string(content_x + col, inner.y + row, "·", style);
+                        }
+                    }
+                }
+                GridStyle::Lines => {
+                    // Terminal cells are taller than wide (~1:2 ratio)
+                    let row_spacing = 1u16;
+                    let col_spacing = 2u16;
+
+                    for row in 0..inner.height {
+                        let is_horizontal_line = row % row_spacing == 0;
+                        for col in 0..content_width {
+                            let is_vertical_line = col % col_spacing == 0;
+                            let ch = match (is_horizontal_line, is_vertical_line) {
+                                (true, true) => "┼",
+                                (true, false) => "─",
+                                (false, true) => "│",
+                                (false, false) => continue,
+                            };
+                            buf.set_string(content_x + col, inner.y + row, ch, style);
+                        }
+                    }
+                }
+                GridStyle::None => {}
             }
         }
 

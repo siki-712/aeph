@@ -117,7 +117,8 @@ fn run_app(
                 doc.cursor_col,
             )
             .scroll_offset(doc.scroll_offset)
-            .show_line_numbers(state.goto_input.is_some());
+            .show_line_numbers(state.goto_input.is_some())
+            .grid_style(state.grid_style);
 
             frame.render_widget(editor, chunks[0]);
 
@@ -320,6 +321,12 @@ fn run_app(
                     // Logo
                     (KeyModifiers::CONTROL, KeyCode::Char('l')) => {
                         state.show_logo = !state.show_logo;
+                    }
+
+                    // Toggle grid style
+                    (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
+                        state.grid_style = state.grid_style.next();
+                        state.notification = Some(state.grid_style.name().to_string());
                     }
 
                     // Clear document

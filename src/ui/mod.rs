@@ -5,7 +5,7 @@ mod logo;
 mod status;
 pub mod theme;
 
-pub use editor::EditorWidget;
+pub use editor::{EditorWidget, GridStyle};
 pub use file_picker::FilePickerWidget;
 pub use help::HelpWidget;
 pub use logo::LogoWidget;
