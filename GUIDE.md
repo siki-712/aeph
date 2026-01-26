@@ -111,16 +111,7 @@ Create `~/.config/aeph/config.toml` to customize behavior:
 auto_pair = true
 ```
 
-### Environment Variables
+For more features, visit [aeph.pages.dev/features](https://aeph.pages.dev/features)
 
-Set colors via environment variables:
-
-```
-AEPH_BG_DARK="25,25,30"
-AEPH_FG_PRIMARY="160,160,160"
-AEPH_ACCENT="cyan"
-AEPH_ACCENT_YELLOW="yellow"
-AEPH_ACCENT_GREEN="green"
-```
 ---
 
