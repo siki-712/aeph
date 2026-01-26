@@ -113,7 +113,7 @@ impl Theme {
                 .unwrap_or(Color::Rgb(120, 120, 120)),
             grid_line: config.colors.grid_line
                 .and_then(|s| parse_color(&s))
-                .unwrap_or(Color::Rgb(50, 50, 55)),
+                .unwrap_or(Color::Rgb(70, 70, 75)),
         }
     }
 }
