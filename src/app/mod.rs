@@ -118,7 +118,8 @@ fn run_app(
             )
             .scroll_offset(doc.scroll_offset)
             .show_line_numbers(state.goto_input.is_some())
-            .grid_style(state.grid_style);
+            .grid_style(state.grid_style)
+            .text_align(state.text_align);
 
             frame.render_widget(editor, chunks[0]);
 
@@ -327,6 +328,12 @@ fn run_app(
                     (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
                         state.grid_style = state.grid_style.next();
                         state.notification = Some(state.grid_style.name().to_string());
+                    }
+
+                    // Toggle text alignment
+                    (m, KeyCode::Char('b') | KeyCode::Char('B')) if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) => {
+                        state.text_align = state.text_align.next();
+                        state.notification = Some(state.text_align.name().to_string());
                     }
 
                     // Switch to previous document

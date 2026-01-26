@@ -63,6 +63,7 @@ Vim-style commands with `:` prefix (500ms timeout):
 | Key | Action |
 |-----|--------|
 | Ctrl+B | Toggle grid style (Off → Dots → Lines) |
+| Ctrl+Shift+B | Toggle body centering |
 | Ctrl+L | Toggle logo |
 
 ## Formatting

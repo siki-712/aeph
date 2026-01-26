@@ -5,7 +5,7 @@ use std::time::Instant;
 use super::document::Document;
 use crate::storage;
 use crate::storage::Config;
-use crate::ui::GridStyle;
+use crate::ui::{GridStyle, TextAlign};
 
 const MAX_DOCUMENTS: usize = 9;
 
@@ -23,6 +23,7 @@ pub struct AppState {
     pub notification: Option<String>,
     pub leader_buffer: Option<(String, Instant)>,
     pub grid_style: GridStyle,
+    pub text_align: TextAlign,
 }
 
 impl AppState {
@@ -65,6 +66,7 @@ impl AppState {
             notification: None,
             leader_buffer: None,
             grid_style: GridStyle::default(),
+            text_align: TextAlign::default(),
         })
     }
 

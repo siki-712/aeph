@@ -34,6 +34,29 @@ impl GridStyle {
     }
 }
 
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+}
+
+impl TextAlign {
+    pub fn next(self) -> Self {
+        match self {
+            TextAlign::Left => TextAlign::Center,
+            TextAlign::Center => TextAlign::Left,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TextAlign::Left => "Body: Full",
+            TextAlign::Center => "Body: Center",
+        }
+    }
+}
+
 pub struct EditorWidget<'a> {
     content: &'a str,
     cursor_line: usize,
@@ -41,6 +64,7 @@ pub struct EditorWidget<'a> {
     scroll_offset: usize,
     show_line_numbers: bool,
     grid_style: GridStyle,
+    text_align: TextAlign,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -52,6 +76,7 @@ impl<'a> EditorWidget<'a> {
             scroll_offset: 0,
             show_line_numbers: false,
             grid_style: GridStyle::default(),
+            text_align: TextAlign::default(),
         }
     }
 
@@ -67,6 +92,11 @@ impl<'a> EditorWidget<'a> {
 
     pub fn grid_style(mut self, style: GridStyle) -> Self {
         self.grid_style = style;
+        self
+    }
+
+    pub fn text_align(mut self, align: TextAlign) -> Self {
+        self.text_align = align;
         self
     }
 
@@ -249,9 +279,18 @@ impl Widget for EditorWidget<'_> {
             0
         };
 
-        // Draw grid background
-        let content_x = inner.x + line_num_width as u16;
-        let content_width = inner.width.saturating_sub(line_num_width as u16);
+        // Calculate body centering offset (text only, grid stays full width)
+        const MAX_BODY_WIDTH: u16 = 80;
+        let available_width = inner.width.saturating_sub(line_num_width as u16);
+        let body_center_offset = if self.text_align == TextAlign::Center && available_width > MAX_BODY_WIDTH {
+            (available_width - MAX_BODY_WIDTH) / 2
+        } else {
+            0
+        };
+
+        // Draw grid background (always full width)
+        let grid_x = inner.x + line_num_width as u16;
+        let grid_width = available_width;
 
         if self.grid_style != GridStyle::None {
             let style = Style::default().fg(theme::grid_line());
@@ -260,8 +299,8 @@ impl Widget for EditorWidget<'_> {
                 GridStyle::Dots => {
                     // Draw dots every 4 columns
                     for row in 0..inner.height {
-                        for col in (0..content_width).step_by(4) {
-                            buf.set_string(content_x + col, inner.y + row, "·", style);
+                        for col in (0..grid_width).step_by(4) {
+                            buf.set_string(grid_x + col, inner.y + row, "·", style);
                         }
                     }
                 }
@@ -272,7 +311,7 @@ impl Widget for EditorWidget<'_> {
 
                     for row in 0..inner.height {
                         let is_horizontal_line = row % row_spacing == 0;
-                        for col in 0..content_width {
+                        for col in 0..grid_width {
                             let is_vertical_line = col % col_spacing == 0;
                             let ch = match (is_horizontal_line, is_vertical_line) {
                                 (true, true) => "┼",
@@ -280,7 +319,7 @@ impl Widget for EditorWidget<'_> {
                                 (false, true) => "│",
                                 (false, false) => continue,
                             };
-                            buf.set_string(content_x + col, inner.y + row, ch, style);
+                            buf.set_string(grid_x + col, inner.y + row, ch, style);
                         }
                     }
                 }
@@ -326,8 +365,9 @@ impl Widget for EditorWidget<'_> {
             // Draw line content (fence lines and content inside code block)
             let show_as_code = is_fence || was_in_code_block;
             let styled_line = self.highlight_line(line, show_as_code);
-            let content_x = inner.x + line_num_width as u16;
-            buf.set_line(content_x, y, &styled_line, inner.width.saturating_sub(line_num_width as u16));
+            let line_content_x = inner.x + line_num_width as u16 + body_center_offset;
+
+            buf.set_line(line_content_x, y, &styled_line, available_width);
 
             // Draw cursor
             if is_cursor_line {
@@ -337,7 +377,7 @@ impl Widget for EditorWidget<'_> {
                     .take(self.cursor_col)
                     .map(|c| c.width().unwrap_or(0))
                     .sum();
-                let cursor_x = content_x + display_col as u16;
+                let cursor_x = line_content_x + display_col as u16;
                 if cursor_x < inner.x + inner.width {
                     // Get the character at cursor position (or space if at end of line)
                     let cursor_char = line.chars().nth(self.cursor_col).unwrap_or(' ');
