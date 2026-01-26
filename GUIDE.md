@@ -57,6 +57,13 @@ Vim-style commands with `:` prefix (500ms timeout):
 | `:p` | Paste below cursor |
 | `:1`-`:9` | Switch to document 1-9 |
 
+## Display
+
+| Key | Action |
+|-----|--------|
+| Ctrl+B | Toggle grid style (Off → Dots → Lines) |
+| Ctrl+L | Toggle logo |
+
 ## Formatting
 
 - [ ] Format markdown with `Ctrl+F`
