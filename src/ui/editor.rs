@@ -436,6 +436,44 @@ impl Widget for EditorWidget<'_> {
 
             buf.set_line(line_content_x, y, &styled_line, text_area_width);
 
+            // Restore grid characters where text is visually invisible (spaces, etc.)
+            if self.grid_style != GridStyle::None {
+                let grid_style = Style::default().fg(theme::grid_line());
+                use unicode_width::UnicodeWidthStr;
+                let line_display_width = line.width() as u16;
+                let restore_end = line_content_x + line_display_width;
+                for x in line_content_x..restore_end {
+                    if x >= inner.x + inner.width {
+                        break;
+                    }
+                    let cell = &buf[(x, y)];
+                    let sym = cell.symbol();
+                    if sym.chars().all(|c| c.is_whitespace()) {
+                        let col = x - inner.x;
+                        let row = y - inner.y;
+                        let grid_char = match self.grid_style {
+                            GridStyle::Dots => {
+                                if col % 4 == 0 { Some("·") } else { None }
+                            }
+                            GridStyle::Lines => {
+                                let is_h = row % 1 == 0;
+                                let is_v = col % 2 == 0;
+                                match (is_h, is_v) {
+                                    (true, true) => Some("┼"),
+                                    (true, false) => Some("─"),
+                                    (false, true) => Some("│"),
+                                    (false, false) => None,
+                                }
+                            }
+                            GridStyle::None => None,
+                        };
+                        if let Some(ch) = grid_char {
+                            buf.set_string(x, y, ch, grid_style);
+                        }
+                    }
+                }
+            }
+
             // Draw cursor
             if is_cursor_line {
                 // Convert character index to display width
