@@ -151,6 +151,52 @@ impl<'a> EditorWidget<'a> {
         self
     }
 
+    /// Restore grid characters at positions where the buffer cell contains whitespace.
+    fn restore_grid_over_whitespace(
+        grid_style: GridStyle,
+        buf: &mut Buffer,
+        origin: (u16, u16),
+        area_width: u16,
+        x_start: u16,
+        x_end: u16,
+        y: u16,
+    ) {
+        if grid_style == GridStyle::None {
+            return;
+        }
+        let grid_line_style = Style::default().fg(theme::grid_line());
+        let dot_style = Style::default().fg(Color::Rgb(60, 60, 65));
+        for x in x_start..x_end {
+            if x >= origin.0 + area_width {
+                break;
+            }
+            let cell = &buf[(x, y)];
+            if cell.symbol().chars().all(|c| c.is_whitespace()) {
+                let col = x - origin.0;
+                let row = y - origin.1;
+                let grid_char = match grid_style {
+                    GridStyle::Dots => {
+                        if col % 4 == 0 { Some(("·", dot_style)) } else { None }
+                    }
+                    GridStyle::Lines => {
+                        let is_h = row % 1 == 0;
+                        let is_v = col % 2 == 0;
+                        match (is_h, is_v) {
+                            (true, true) => Some(("┼", grid_line_style)),
+                            (true, false) => Some(("─", grid_line_style)),
+                            (false, true) => Some(("│", grid_line_style)),
+                            (false, false) => None,
+                        }
+                    }
+                    GridStyle::None => None,
+                };
+                if let Some((ch, st)) = grid_char {
+                    buf.set_string(x, y, ch, st);
+                }
+            }
+        }
+    }
+
     fn highlight_line(&self, line: &str, in_code_block: bool) -> Line<'a> {
         let base_style = Style::default().fg(Color::White);
         let code_style = base_style.add_modifier(Modifier::ITALIC);
@@ -353,10 +399,11 @@ impl Widget for EditorWidget<'_> {
 
             match self.grid_style {
                 GridStyle::Dots => {
-                    // Draw dots every 4 columns
+                    // Dots use a slightly brighter color than lines
+                    let dot_style = Style::default().fg(Color::Rgb(60, 60, 65));
                     for row in 0..inner.height {
                         for col in (0..grid_width).step_by(4) {
-                            buf.set_string(grid_x + col, inner.y + row, "·", style);
+                            buf.set_string(grid_x + col, inner.y + row, "·", dot_style);
                         }
                     }
                 }
@@ -392,6 +439,12 @@ impl Widget for EditorWidget<'_> {
             let placeholder_y = inner.y + PADDING_TOP;
             let placeholder_style = Style::default().fg(Color::Rgb(140, 140, 140)).add_modifier(Modifier::ITALIC);
             buf.set_string(placeholder_x, placeholder_y, quote, placeholder_style);
+
+            // Restore grid characters where placeholder has whitespace
+            Self::restore_grid_over_whitespace(
+                self.grid_style, buf, (inner.x, inner.y), inner.width,
+                placeholder_x, placeholder_x + quote.len() as u16, placeholder_y,
+            );
         }
 
         // Track code block state for all lines up to visible area
@@ -435,6 +488,16 @@ impl Widget for EditorWidget<'_> {
             let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
 
             buf.set_line(line_content_x, y, &styled_line, text_area_width);
+
+            // Restore grid characters where text is visually invisible (spaces, etc.)
+            {
+                use unicode_width::UnicodeWidthStr;
+                let line_display_width = line.width() as u16;
+                Self::restore_grid_over_whitespace(
+                    self.grid_style, buf, (inner.x, inner.y), inner.width,
+                    line_content_x, line_content_x + line_display_width, y,
+                );
+            }
 
             // Draw cursor
             if is_cursor_line {
