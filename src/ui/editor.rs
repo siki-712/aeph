@@ -353,10 +353,11 @@ impl Widget for EditorWidget<'_> {
 
             match self.grid_style {
                 GridStyle::Dots => {
-                    // Draw dots every 4 columns
+                    // Dots use a slightly brighter color than lines
+                    let dot_style = Style::default().fg(Color::Rgb(60, 60, 65));
                     for row in 0..inner.height {
                         for col in (0..grid_width).step_by(4) {
-                            buf.set_string(grid_x + col, inner.y + row, "·", style);
+                            buf.set_string(grid_x + col, inner.y + row, "·", dot_style);
                         }
                     }
                 }
