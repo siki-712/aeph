@@ -389,8 +389,10 @@ impl Widget for EditorWidget<'_> {
         } else {
             0
         };
+        // Text content width (constrained to MAX_BODY_WIDTH when centering)
+        let content_width = text_area_width.saturating_sub(2 * body_center_offset);
 
-        // Draw grid background (always full width, no padding)
+        // Draw grid background (always full width)
         let grid_x = inner.x;
         let grid_width = inner.width;
 
@@ -455,6 +457,8 @@ impl Widget for EditorWidget<'_> {
             }
         }
 
+        let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
+
         for (i, line_idx) in (self.scroll_offset..).take(visible_height).enumerate() {
             if line_idx >= lines.len() {
                 break;
@@ -485,14 +489,13 @@ impl Widget for EditorWidget<'_> {
             // Draw line content (fence lines and content inside code block)
             let show_as_code = is_fence || was_in_code_block;
             let styled_line = self.highlight_line(line, show_as_code);
-            let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
 
-            buf.set_line(line_content_x, y, &styled_line, text_area_width);
+            buf.set_line(line_content_x, y, &styled_line, content_width);
 
             // Restore grid characters where text is visually invisible (spaces, etc.)
             {
                 use unicode_width::UnicodeWidthStr;
-                let line_display_width = line.width() as u16;
+                let line_display_width = line.width().min(content_width as usize) as u16;
                 Self::restore_grid_over_whitespace(
                     self.grid_style, buf, (inner.x, inner.y), inner.width,
                     line_content_x, line_content_x + line_display_width, y,
@@ -508,7 +511,7 @@ impl Widget for EditorWidget<'_> {
                     .map(|c| c.width().unwrap_or(0))
                     .sum();
                 let cursor_x = line_content_x + display_col as u16;
-                if cursor_x < inner.x + inner.width {
+                if cursor_x < line_content_x + content_width {
                     // Get the character at cursor position (or space if at end of line)
                     let cursor_char = line.chars().nth(self.cursor_col).unwrap_or(' ');
                     let char_str = cursor_char.to_string();

@@ -14,6 +14,8 @@ pub struct Document {
     pub scroll_offset: usize,
     pub modified: bool,
     undo_stack: Vec<String>,
+    /// Maximum line width for auto-wrap (None = no limit)
+    pub max_line_width: Option<u16>,
 }
 
 impl Document {
@@ -37,6 +39,7 @@ impl Document {
             scroll_offset: 0,
             modified: false,
             undo_stack: Vec::new(),
+            max_line_width: None,
         })
     }
 
@@ -233,6 +236,55 @@ impl Document {
         self.content.insert(offset, c);
         self.cursor_col += 1;
         self.modified = true;
+
+        // Auto-wrap if line exceeds max width
+        if let Some(max_width) = self.max_line_width {
+            let line = self.current_line();
+            let line_width = line.width() as u16;
+            if line_width > max_width && c != '\n' {
+                // Find a good break point (last space before max_width)
+                let chars: Vec<char> = line.chars().collect();
+                let mut width: u16 = 0;
+                let mut last_space_idx: Option<usize> = None;
+                let mut break_idx: Option<usize> = None;
+
+                for (i, &ch) in chars.iter().enumerate() {
+                    use unicode_width::UnicodeWidthChar;
+                    let ch_width = ch.width().unwrap_or(0) as u16;
+                    if ch == ' ' && width <= max_width {
+                        last_space_idx = Some(i);
+                    }
+                    width += ch_width;
+                    if width > max_width && break_idx.is_none() {
+                        // Prefer breaking at last space, otherwise break here
+                        break_idx = last_space_idx.or(Some(i));
+                    }
+                }
+
+                if let Some(break_at) = break_idx {
+                    // Calculate the offset of the break point in the content
+                    let line_start = self.line_byte_offset(self.cursor_line);
+                    let break_offset = line_start + chars[..break_at].iter().collect::<String>().len();
+
+                    // If breaking at space, remove the space and insert newline
+                    if chars.get(break_at) == Some(&' ') {
+                        self.content.remove(break_offset);
+                        self.content.insert(break_offset, '\n');
+                    } else {
+                        self.content.insert(break_offset, '\n');
+                    }
+
+                    // Adjust cursor position
+                    if self.cursor_col > break_at {
+                        self.cursor_line += 1;
+                        self.cursor_col = self.cursor_col - break_at - 1;
+                        if chars.get(break_at) != Some(&' ') {
+                            self.cursor_col += 1;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Get up to n characters before the cursor on the current line

@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::storage;
-use crate::ui::{EditorWidget, FilePickerWidget, HelpWidget, LogoWidget, StatusBar};
+use crate::ui::{EditorWidget, FilePickerWidget, HelpWidget, LogoWidget, StatusBar, TextAlign};
 use state::AppState;
 
 pub fn run(file: Option<PathBuf>) -> Result<()> {
@@ -335,6 +335,15 @@ fn run_app(
                     (m, KeyCode::Char('b') | KeyCode::Char('B')) if m.contains(KeyModifiers::CONTROL) && m.contains(KeyModifiers::SHIFT) => {
                         state.text_align = state.text_align.next();
                         state.notification = Some(state.text_align.name().to_string());
+                        // Update max line width for auto-wrap
+                        let max_width = if state.text_align == TextAlign::Center {
+                            Some(80)
+                        } else {
+                            None
+                        };
+                        for doc in &mut state.documents {
+                            doc.max_line_width = max_width;
+                        }
                     }
 
                     // Switch to previous document

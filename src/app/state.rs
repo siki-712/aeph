@@ -62,6 +62,18 @@ impl AppState {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
+        let text_align = TextAlign::from_u8(session.text_align);
+
+        // Set max line width based on text alignment
+        let max_width = if text_align == TextAlign::Center {
+            Some(80)
+        } else {
+            None
+        };
+        for doc in &mut documents {
+            doc.max_line_width = max_width;
+        }
+
         Ok(Self {
             documents,
             current_doc,
@@ -76,7 +88,7 @@ impl AppState {
             notification: None,
             leader_buffer: None,
             grid_style: GridStyle::from_u8(session.grid_style),
-            text_align: TextAlign::from_u8(session.text_align),
+            text_align,
             quote_seed,
         })
     }
