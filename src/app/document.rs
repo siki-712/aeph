@@ -7,8 +7,10 @@ use crate::markdown;
 use super::typing;
 
 /// Marker for soft line breaks (auto-wrapped lines)
-/// Using Zero Width Space after newline to mark soft breaks
-const SOFT_BREAK: &str = "\n\u{200B}";
+/// SOFT_BREAK_SPACE: broke at a space (restore as space)
+/// SOFT_BREAK_NONE: broke without space (restore as nothing)
+const SOFT_BREAK_SPACE: &str = "\n\u{200B}";
+const SOFT_BREAK_NONE: &str = "\n\u{200C}";
 
 pub struct Document {
     pub content: String,
@@ -272,19 +274,21 @@ impl Document {
                     let line_start = self.line_byte_offset(self.cursor_line);
                     let break_offset = line_start + chars[..break_at].iter().collect::<String>().len();
 
-                    // If breaking at space, remove the space and insert newline
-                    if chars.get(break_at) == Some(&' ') {
+                    // If breaking at space, remove the space and use SOFT_BREAK_SPACE
+                    // Otherwise use SOFT_BREAK_NONE
+                    let is_space = chars.get(break_at) == Some(&' ');
+                    if is_space {
                         self.content.remove(break_offset);
-                        self.content.insert(break_offset, '\n');
+                        self.content.insert_str(break_offset, SOFT_BREAK_SPACE);
                     } else {
-                        self.content.insert(break_offset, '\n');
+                        self.content.insert_str(break_offset, SOFT_BREAK_NONE);
                     }
 
                     // Adjust cursor position
                     if self.cursor_col > break_at {
                         self.cursor_line += 1;
                         self.cursor_col = self.cursor_col - break_at - 1;
-                        if chars.get(break_at) != Some(&' ') {
+                        if !is_space {
                             self.cursor_col += 1;
                         }
                     }
@@ -299,13 +303,14 @@ impl Document {
 
         let lines: Vec<String> = self.content.lines().map(|s| s.to_string()).collect();
         let mut new_parts: Vec<String> = Vec::new();
-        let mut soft_break_indices: Vec<usize> = Vec::new(); // Track which joins are soft breaks
+        // Track which joins are soft breaks: (index, was_space)
+        let mut soft_break_info: Vec<(usize, bool)> = Vec::new();
         let mut cursor_line_offset: i32 = 0;
 
         for (line_idx, line) in lines.iter().enumerate() {
             // Skip lines that start with soft break marker (already wrapped)
-            let line = if line.starts_with('\u{200B}') {
-                line[3..].to_string() // Skip the marker (3 bytes for U+200B)
+            let line = if line.starts_with('\u{200B}') || line.starts_with('\u{200C}') {
+                line[3..].to_string() // Skip the marker (3 bytes)
             } else {
                 line.clone()
             };
@@ -339,7 +344,7 @@ impl Document {
                     };
 
                     new_parts.push(before);
-                    soft_break_indices.push(new_parts.len() - 1); // Mark this as needing soft break after
+                    soft_break_info.push((new_parts.len() - 1, is_space));
 
                     // Adjust cursor line offset
                     if line_idx < self.cursor_line {
@@ -363,8 +368,12 @@ impl Document {
         for (i, part) in new_parts.iter().enumerate() {
             new_content.push_str(part);
             if i < new_parts.len() - 1 {
-                if soft_break_indices.contains(&i) {
-                    new_content.push_str(SOFT_BREAK);
+                if let Some((_, is_space)) = soft_break_info.iter().find(|(idx, _)| *idx == i) {
+                    if *is_space {
+                        new_content.push_str(SOFT_BREAK_SPACE);
+                    } else {
+                        new_content.push_str(SOFT_BREAK_NONE);
+                    }
                 } else {
                     new_content.push('\n');
                 }
@@ -378,9 +387,19 @@ impl Document {
         }
     }
 
+    /// Check if content has any soft breaks
+    fn has_soft_breaks(&self) -> bool {
+        self.content.contains(SOFT_BREAK_SPACE) || self.content.contains(SOFT_BREAK_NONE)
+    }
+
+    /// Check if a line starts with a soft break marker
+    fn is_soft_break_line(line: &str) -> bool {
+        line.starts_with('\u{200B}') || line.starts_with('\u{200C}')
+    }
+
     /// Remove soft breaks and rejoin lines
     pub fn unwrap_soft_breaks(&mut self) {
-        if !self.content.contains(SOFT_BREAK) {
+        if !self.has_soft_breaks() {
             return;
         }
 
@@ -389,8 +408,8 @@ impl Document {
         let mut soft_breaks_before_cursor = 0;
 
         for i in 0..self.cursor_line {
-            // Check if this line ends with soft break marker
-            if i + 1 < lines.len() && lines.get(i + 1).is_some_and(|l| l.starts_with('\u{200B}')) {
+            // Check if next line starts with soft break marker
+            if i + 1 < lines.len() && lines.get(i + 1).is_some_and(|l| Self::is_soft_break_line(l)) {
                 soft_breaks_before_cursor += 1;
             }
         }
@@ -400,7 +419,7 @@ impl Document {
         let mut accumulated_length = 0;
 
         for (i, line) in self.content.split('\n').enumerate() {
-            let clean_line = if line.starts_with('\u{200B}') { &line[3..] } else { line };
+            let clean_line = if Self::is_soft_break_line(line) { &line[3..] } else { line };
 
             if i == self.cursor_line {
                 new_cursor_col = accumulated_length + self.cursor_col;
@@ -408,18 +427,23 @@ impl Document {
             }
 
             // Check if next line starts with soft break marker
-            let next_is_soft = self.content.split('\n').nth(i + 1)
-                .is_some_and(|l| l.starts_with('\u{200B}'));
+            let next_line = self.content.split('\n').nth(i + 1);
+            let next_is_soft_space = next_line.is_some_and(|l| l.starts_with('\u{200B}'));
+            let next_is_soft_none = next_line.is_some_and(|l| l.starts_with('\u{200C}'));
 
-            if next_is_soft {
-                accumulated_length += clean_line.len() + 1; // +1 for the space that was removed
+            if next_is_soft_space {
+                accumulated_length += clean_line.len() + 1; // +1 for the space
+            } else if next_is_soft_none {
+                accumulated_length += clean_line.len(); // No space added
             } else {
                 accumulated_length = 0;
             }
         }
 
-        // Replace soft breaks with space
-        let new_content = self.content.replace(SOFT_BREAK, " ");
+        // Replace soft breaks: SPACE version with space, NONE version with nothing
+        let new_content = self.content
+            .replace(SOFT_BREAK_SPACE, " ")
+            .replace(SOFT_BREAK_NONE, "");
 
         if new_content != self.content {
             self.content = new_content;
@@ -430,7 +454,9 @@ impl Document {
 
     /// Get content without soft breaks (for saving)
     pub fn content_for_save(&self) -> String {
-        self.content.replace(SOFT_BREAK, " ")
+        self.content
+            .replace(SOFT_BREAK_SPACE, " ")
+            .replace(SOFT_BREAK_NONE, "")
     }
 
     /// Get up to n characters before the cursor on the current line

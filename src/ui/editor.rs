@@ -464,7 +464,12 @@ impl Widget for EditorWidget<'_> {
                 break;
             }
 
-            let line = lines[line_idx];
+            let raw_line = lines[line_idx];
+            // Skip soft break markers at line start
+            let line = raw_line
+                .strip_prefix('\u{200B}')
+                .or_else(|| raw_line.strip_prefix('\u{200C}'))
+                .unwrap_or(raw_line);
             let is_cursor_line = line_idx == self.cursor_line;
             let y = inner.y + PADDING_TOP + i as u16;
 
