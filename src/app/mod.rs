@@ -343,6 +343,13 @@ fn run_app(
                         };
                         for doc in &mut state.documents {
                             doc.max_line_width = max_width;
+                            if state.text_align == TextAlign::Center {
+                                // Wrap existing long lines when switching to center mode
+                                doc.wrap_long_lines(80);
+                            } else {
+                                // Unwrap soft breaks when switching back to normal mode
+                                doc.unwrap_soft_breaks();
+                            }
                         }
                     }
 
