@@ -19,6 +19,7 @@ pub struct AppState {
     pub show_logo: bool,
     pub picker_selection: usize,
     pub viewport_height: usize,
+    pub viewport_width: u16,
     pub goto_input: Option<String>,
     pub notification: Option<String>,
     pub leader_buffer: Option<(String, Instant)>,
@@ -64,15 +65,8 @@ impl AppState {
 
         let text_align = TextAlign::from_u8(session.text_align);
 
-        // Set max line width based on text alignment
-        let max_width = if text_align == TextAlign::Center {
-            Some(80)
-        } else {
-            None
-        };
-        for doc in &mut documents {
-            doc.max_line_width = max_width;
-        }
+        // wrap_width will be set by update_wrap_width() after first render
+        // when viewport_width is known
 
         Ok(Self {
             documents,
@@ -84,6 +78,7 @@ impl AppState {
             show_logo: all_empty,
             picker_selection: 0,
             viewport_height: 24,
+            viewport_width: 80,
             goto_input: None,
             notification: None,
             leader_buffer: None,
@@ -135,6 +130,33 @@ impl AppState {
 
     pub fn format(&mut self) -> Result<()> {
         self.doc_mut().format()
+    }
+
+    /// Update wrap_width for all documents based on text_align and viewport_width.
+    /// This ensures cursor movement matches the visual line wrapping in the editor.
+    /// Must match the logic in editor.rs exactly.
+    pub fn update_wrap_width(&mut self) {
+        const PADDING_LEFT: u16 = 1;
+        const PADDING_RIGHT: u16 = 1;
+        const MAX_BODY_WIDTH: u16 = 80;
+
+        let text_area_width = self.viewport_width.saturating_sub(PADDING_LEFT + PADDING_RIGHT);
+
+        // Must match editor.rs calculation exactly:
+        // body_center_offset = (text_area_width - MAX_BODY_WIDTH) / 2
+        // content_width = text_area_width - 2 * body_center_offset
+        // wrap_width = if body_center_offset > 0 { Some(content_width) } else { None }
+        let wrap_width = if self.text_align == TextAlign::Center && text_area_width > MAX_BODY_WIDTH {
+            let body_center_offset = (text_area_width - MAX_BODY_WIDTH) / 2;
+            let content_width = text_area_width.saturating_sub(2 * body_center_offset);
+            Some(content_width)
+        } else {
+            None
+        };
+
+        for doc in &mut self.documents {
+            doc.wrap_width = wrap_width;
+        }
     }
 
     pub fn goto_line(&mut self, line_num: usize) {

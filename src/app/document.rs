@@ -6,11 +6,6 @@ use unicode_width::UnicodeWidthStr;
 use crate::markdown;
 use super::typing;
 
-/// Marker for soft line breaks (auto-wrapped lines)
-/// SOFT_BREAK_SPACE: broke at a space (restore as space)
-/// SOFT_BREAK_NONE: broke without space (restore as nothing)
-const SOFT_BREAK_SPACE: &str = "\n\u{200B}";
-const SOFT_BREAK_NONE: &str = "\n\u{200C}";
 
 pub struct Document {
     pub content: String,
@@ -20,8 +15,8 @@ pub struct Document {
     pub scroll_offset: usize,
     pub modified: bool,
     undo_stack: Vec<String>,
-    /// Maximum line width for auto-wrap (None = no limit)
-    pub max_line_width: Option<u16>,
+    /// Visual wrap width for cursor movement (None = no wrap)
+    pub wrap_width: Option<u16>,
 }
 
 impl Document {
@@ -45,7 +40,7 @@ impl Document {
             scroll_offset: 0,
             modified: false,
             undo_stack: Vec::new(),
-            max_line_width: None,
+            wrap_width: None,
         })
     }
 
@@ -94,9 +89,7 @@ impl Document {
 
     pub fn save(&mut self) -> Result<()> {
         if let Some(ref path) = self.file_path {
-            // Save without soft breaks
-            let content_to_save = self.content_for_save();
-            fs::write(path, &content_to_save)
+            fs::write(path, &self.content)
                 .with_context(|| format!("Failed to save: {}", path.display()))?;
             self.modified = false;
         }
@@ -244,219 +237,6 @@ impl Document {
         self.content.insert(offset, c);
         self.cursor_col += 1;
         self.modified = true;
-
-        // Auto-wrap if line exceeds max width
-        if let Some(max_width) = self.max_line_width {
-            let line = self.current_line();
-            let line_width = line.width() as u16;
-            if line_width > max_width && c != '\n' {
-                // Find a good break point (last space before max_width)
-                let chars: Vec<char> = line.chars().collect();
-                let mut width: u16 = 0;
-                let mut last_space_idx: Option<usize> = None;
-                let mut break_idx: Option<usize> = None;
-
-                for (i, &ch) in chars.iter().enumerate() {
-                    use unicode_width::UnicodeWidthChar;
-                    let ch_width = ch.width().unwrap_or(0) as u16;
-                    if ch == ' ' && width <= max_width {
-                        last_space_idx = Some(i);
-                    }
-                    width += ch_width;
-                    if width > max_width && break_idx.is_none() {
-                        // Prefer breaking at last space, otherwise break here
-                        break_idx = last_space_idx.or(Some(i));
-                    }
-                }
-
-                if let Some(break_at) = break_idx {
-                    // Calculate the offset of the break point in the content
-                    let line_start = self.line_byte_offset(self.cursor_line);
-                    let break_offset = line_start + chars[..break_at].iter().collect::<String>().len();
-
-                    // If breaking at space, remove the space and use SOFT_BREAK_SPACE
-                    // Otherwise use SOFT_BREAK_NONE
-                    let is_space = chars.get(break_at) == Some(&' ');
-                    if is_space {
-                        self.content.remove(break_offset);
-                        self.content.insert_str(break_offset, SOFT_BREAK_SPACE);
-                    } else {
-                        self.content.insert_str(break_offset, SOFT_BREAK_NONE);
-                    }
-
-                    // Adjust cursor position
-                    if self.cursor_col > break_at {
-                        self.cursor_line += 1;
-                        self.cursor_col = self.cursor_col - break_at - 1;
-                        if !is_space {
-                            self.cursor_col += 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Wrap all lines that exceed the specified max width using soft breaks
-    pub fn wrap_long_lines(&mut self, max_width: u16) {
-        use unicode_width::UnicodeWidthChar;
-
-        let lines: Vec<String> = self.content.lines().map(|s| s.to_string()).collect();
-        let mut new_parts: Vec<String> = Vec::new();
-        // Track which joins are soft breaks: (index, was_space)
-        let mut soft_break_info: Vec<(usize, bool)> = Vec::new();
-        let mut cursor_line_offset: i32 = 0;
-
-        for (line_idx, line) in lines.iter().enumerate() {
-            // Skip lines that start with soft break marker (already wrapped)
-            let line = if line.starts_with('\u{200B}') || line.starts_with('\u{200C}') {
-                line[3..].to_string() // Skip the marker (3 bytes)
-            } else {
-                line.clone()
-            };
-            let mut remaining = line;
-            let mut is_first_segment = true;
-
-            loop {
-                let chars: Vec<char> = remaining.chars().collect();
-                let mut width: u16 = 0;
-                let mut last_space_idx: Option<usize> = None;
-                let mut break_idx: Option<usize> = None;
-
-                for (i, &ch) in chars.iter().enumerate() {
-                    let ch_width = ch.width().unwrap_or(0) as u16;
-                    if ch == ' ' && width <= max_width {
-                        last_space_idx = Some(i);
-                    }
-                    width += ch_width;
-                    if width > max_width && break_idx.is_none() {
-                        break_idx = last_space_idx.or(Some(i));
-                    }
-                }
-
-                if let Some(break_at) = break_idx {
-                    let is_space = chars.get(break_at) == Some(&' ');
-                    let before: String = chars[..break_at].iter().collect();
-                    let after: String = if is_space {
-                        chars[break_at + 1..].iter().collect()
-                    } else {
-                        chars[break_at..].iter().collect()
-                    };
-
-                    new_parts.push(before);
-                    soft_break_info.push((new_parts.len() - 1, is_space));
-
-                    // Adjust cursor line offset
-                    if line_idx < self.cursor_line {
-                        cursor_line_offset += 1;
-                    } else if line_idx == self.cursor_line && self.cursor_col > break_at && is_first_segment {
-                        cursor_line_offset += 1;
-                        self.cursor_col = self.cursor_col - break_at - if is_space { 1 } else { 0 };
-                    }
-
-                    remaining = after;
-                    is_first_segment = false;
-                } else {
-                    new_parts.push(remaining);
-                    break;
-                }
-            }
-        }
-
-        // Join with appropriate line breaks
-        let mut new_content = String::new();
-        for (i, part) in new_parts.iter().enumerate() {
-            new_content.push_str(part);
-            if i < new_parts.len() - 1 {
-                if let Some((_, is_space)) = soft_break_info.iter().find(|(idx, _)| *idx == i) {
-                    if *is_space {
-                        new_content.push_str(SOFT_BREAK_SPACE);
-                    } else {
-                        new_content.push_str(SOFT_BREAK_NONE);
-                    }
-                } else {
-                    new_content.push('\n');
-                }
-            }
-        }
-
-        if new_content != self.content {
-            self.content = new_content;
-            self.cursor_line = (self.cursor_line as i32 + cursor_line_offset) as usize;
-            // Don't mark as modified - this is just a view transformation
-        }
-    }
-
-    /// Check if content has any soft breaks
-    fn has_soft_breaks(&self) -> bool {
-        self.content.contains(SOFT_BREAK_SPACE) || self.content.contains(SOFT_BREAK_NONE)
-    }
-
-    /// Check if a line starts with a soft break marker
-    fn is_soft_break_line(line: &str) -> bool {
-        line.starts_with('\u{200B}') || line.starts_with('\u{200C}')
-    }
-
-    /// Remove soft breaks and rejoin lines
-    pub fn unwrap_soft_breaks(&mut self) {
-        if !self.has_soft_breaks() {
-            return;
-        }
-
-        // Count soft breaks before cursor to adjust cursor position
-        let lines: Vec<&str> = self.content.lines().collect();
-        let mut soft_breaks_before_cursor = 0;
-
-        for i in 0..self.cursor_line {
-            // Check if next line starts with soft break marker
-            if i + 1 < lines.len() && lines.get(i + 1).is_some_and(|l| Self::is_soft_break_line(l)) {
-                soft_breaks_before_cursor += 1;
-            }
-        }
-
-        // Calculate new cursor column (need to add previous soft-wrapped segments)
-        let mut new_cursor_col = self.cursor_col;
-        let mut accumulated_length = 0;
-
-        for (i, line) in self.content.split('\n').enumerate() {
-            let clean_line = if Self::is_soft_break_line(line) { &line[3..] } else { line };
-
-            if i == self.cursor_line {
-                new_cursor_col = accumulated_length + self.cursor_col;
-                break;
-            }
-
-            // Check if next line starts with soft break marker
-            let next_line = self.content.split('\n').nth(i + 1);
-            let next_is_soft_space = next_line.is_some_and(|l| l.starts_with('\u{200B}'));
-            let next_is_soft_none = next_line.is_some_and(|l| l.starts_with('\u{200C}'));
-
-            if next_is_soft_space {
-                accumulated_length += clean_line.len() + 1; // +1 for the space
-            } else if next_is_soft_none {
-                accumulated_length += clean_line.len(); // No space added
-            } else {
-                accumulated_length = 0;
-            }
-        }
-
-        // Replace soft breaks: SPACE version with space, NONE version with nothing
-        let new_content = self.content
-            .replace(SOFT_BREAK_SPACE, " ")
-            .replace(SOFT_BREAK_NONE, "");
-
-        if new_content != self.content {
-            self.content = new_content;
-            self.cursor_line = self.cursor_line.saturating_sub(soft_breaks_before_cursor);
-            self.cursor_col = new_cursor_col;
-        }
-    }
-
-    /// Get content without soft breaks (for saving)
-    pub fn content_for_save(&self) -> String {
-        self.content
-            .replace(SOFT_BREAK_SPACE, " ")
-            .replace(SOFT_BREAK_NONE, "")
     }
 
     /// Get up to n characters before the cursor on the current line
@@ -644,17 +424,146 @@ impl Document {
     }
 
     pub fn move_cursor_up(&mut self) {
-        if self.cursor_line > 0 {
-            self.cursor_line -= 1;
-            self.clamp_cursor_col();
+        if let Some(wrap_width) = self.wrap_width {
+            // Visual line-based movement
+            let line = self.current_line();
+            let (visual_col, visual_row) = self.cursor_visual_position(line, wrap_width);
+
+            if visual_row > 0 {
+                // Move up within the same logical line
+                let new_visual_row = visual_row - 1;
+                self.cursor_col = self.col_from_visual_row(line, wrap_width, new_visual_row, visual_col);
+            } else if self.cursor_line > 0 {
+                // Move to previous logical line
+                self.cursor_line -= 1;
+                let prev_line = self.current_line();
+                let prev_visual_rows = self.visual_line_count(prev_line, wrap_width);
+                self.cursor_col = self.col_from_visual_row(prev_line, wrap_width, prev_visual_rows - 1, visual_col);
+            }
+        } else {
+            if self.cursor_line > 0 {
+                self.cursor_line -= 1;
+                self.clamp_cursor_col();
+            }
         }
     }
 
     pub fn move_cursor_down(&mut self) {
-        if self.cursor_line < self.line_count().saturating_sub(1) {
-            self.cursor_line += 1;
-            self.clamp_cursor_col();
+        if let Some(wrap_width) = self.wrap_width {
+            // Visual line-based movement
+            let line = self.current_line().to_string();
+            let visual_rows = self.visual_line_count(&line, wrap_width);
+            let (visual_col, visual_row) = self.cursor_visual_position(&line, wrap_width);
+
+            if visual_row < visual_rows - 1 {
+                // Move down within the same logical line
+                let new_visual_row = visual_row + 1;
+                self.cursor_col = self.col_from_visual_row(&line, wrap_width, new_visual_row, visual_col);
+            } else if self.cursor_line < self.line_count().saturating_sub(1) {
+                // Move to next logical line
+                self.cursor_line += 1;
+                let next_line = self.current_line();
+                self.cursor_col = self.col_from_visual_row(next_line, wrap_width, 0, visual_col);
+            }
+        } else {
+            if self.cursor_line < self.line_count().saturating_sub(1) {
+                self.cursor_line += 1;
+                self.clamp_cursor_col();
+            }
         }
+    }
+
+    /// Get visual position (column within visual row, visual row index) for cursor
+    fn cursor_visual_position(&self, line: &str, wrap_width: u16) -> (usize, usize) {
+        use unicode_width::UnicodeWidthChar;
+        let mut visual_col = 0usize;
+        let mut visual_row = 0usize;
+        let mut width = 0u16;
+
+        for (i, ch) in line.chars().enumerate() {
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            // Check for wrap BEFORE checking cursor position
+            // This ensures cursor at wrap boundary is reported on the new row
+            if width + ch_width > wrap_width && width > 0 {
+                visual_row += 1;
+                width = 0;
+                visual_col = 0;
+            }
+            if i == self.cursor_col {
+                return (visual_col, visual_row);
+            }
+            width += ch_width;
+            visual_col += 1;
+        }
+        (visual_col, visual_row)
+    }
+
+    /// Count visual lines for a logical line
+    fn visual_line_count(&self, line: &str, wrap_width: u16) -> usize {
+        use unicode_width::UnicodeWidthChar;
+        if line.is_empty() {
+            return 1;
+        }
+        let mut rows = 1usize;
+        let mut width = 0u16;
+        for ch in line.chars() {
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            if width + ch_width > wrap_width && width > 0 {
+                rows += 1;
+                width = ch_width;
+            } else {
+                width += ch_width;
+            }
+        }
+        rows
+    }
+
+    /// Get character column from visual row and visual column position
+    fn col_from_visual_row(&self, line: &str, wrap_width: u16, target_row: usize, target_visual_col: usize) -> usize {
+        use unicode_width::UnicodeWidthChar;
+        let chars: Vec<char> = line.chars().collect();
+        let mut row = 0usize;
+        let mut width = 0u16;
+        let mut row_start = 0usize;
+
+        // Find the start of target_row
+        for (i, &ch) in chars.iter().enumerate() {
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            if width + ch_width > wrap_width && width > 0 {
+                if row == target_row {
+                    break;
+                }
+                row += 1;
+                row_start = i;
+                width = ch_width;
+            } else {
+                width += ch_width;
+            }
+        }
+
+        if row < target_row {
+            row_start = chars.len();
+        }
+
+        // Now find the position within target_row
+        let mut col = row_start;
+        let mut visual_col = 0usize;
+        width = 0;
+
+        for &ch in chars[row_start..].iter() {
+            if visual_col >= target_visual_col {
+                break;
+            }
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            if width + ch_width > wrap_width && width > 0 {
+                break; // End of this visual row
+            }
+            width += ch_width;
+            col += 1;
+            visual_col += 1;
+        }
+
+        col.min(chars.len())
     }
 
     pub fn move_cursor_left(&mut self) {
