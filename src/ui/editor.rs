@@ -359,6 +359,64 @@ impl<'a> EditorWidget<'a> {
 
         Some((code_end, &text[..start], &text[start..code_end]))
     }
+
+    /// Segment of a line for visual display
+    fn wrap_line_for_display(line: &str, max_width: Option<u16>) -> Vec<VisualSegment> {
+        use unicode_width::UnicodeWidthChar;
+
+        let max_width = match max_width {
+            Some(w) if w > 0 => w,
+            _ => return vec![VisualSegment {
+                text: line.to_string(),
+                char_start: 0,
+                char_end: line.chars().count(),
+            }],
+        };
+
+        let mut segments = Vec::new();
+        let chars: Vec<char> = line.chars().collect();
+        let mut seg_start: usize = 0;
+
+        while seg_start < chars.len() {
+            let mut width: u16 = 0;
+            let mut seg_end = seg_start;
+
+            for (i, &ch) in chars[seg_start..].iter().enumerate() {
+                let ch_width = ch.width().unwrap_or(0) as u16;
+                if width + ch_width > max_width && i > 0 {
+                    break;
+                }
+                width += ch_width;
+                seg_end = seg_start + i + 1;
+            }
+
+            let text: String = chars[seg_start..seg_end].iter().collect();
+            segments.push(VisualSegment {
+                text,
+                char_start: seg_start,
+                char_end: seg_end,
+            });
+
+            seg_start = seg_end;
+        }
+
+        if segments.is_empty() {
+            segments.push(VisualSegment {
+                text: String::new(),
+                char_start: 0,
+                char_end: 0,
+            });
+        }
+
+        segments
+    }
+}
+
+/// Visual segment of a wrapped line
+struct VisualSegment {
+    text: String,
+    char_start: usize,
+    char_end: usize,
 }
 
 impl Widget for EditorWidget<'_> {
@@ -389,8 +447,10 @@ impl Widget for EditorWidget<'_> {
         } else {
             0
         };
+        // Text content width (constrained to MAX_BODY_WIDTH when centering)
+        let content_width = text_area_width.saturating_sub(2 * body_center_offset);
 
-        // Draw grid background (always full width, no padding)
+        // Draw grid background (always full width)
         let grid_x = inner.x;
         let grid_width = inner.width;
 
@@ -455,14 +515,18 @@ impl Widget for EditorWidget<'_> {
             }
         }
 
-        for (i, line_idx) in (self.scroll_offset..).take(visible_height).enumerate() {
-            if line_idx >= lines.len() {
+        let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
+        let wrap_width = if body_center_offset > 0 { Some(content_width) } else { None };
+
+        let mut display_row: usize = 0;
+
+        for line_idx in self.scroll_offset..lines.len() {
+            if display_row >= visible_height {
                 break;
             }
 
             let line = lines[line_idx];
             let is_cursor_line = line_idx == self.cursor_line;
-            let y = inner.y + PADDING_TOP + i as u16;
 
             // Check if this line starts/ends a code block
             let is_fence = line.trim_start().starts_with("```");
@@ -471,55 +535,74 @@ impl Widget for EditorWidget<'_> {
                 in_code_block = !in_code_block;
             }
 
-            // Draw line number
-            if self.show_line_numbers {
-                let line_num = format!("{:>width$} ", line_idx + 1, width = line_num_width - 1);
-                let num_style = if is_cursor_line {
-                    Style::default().fg(theme::accent_yellow())
-                } else {
-                    Style::default().fg(theme::fg_muted())
-                };
-                buf.set_string(inner.x + PADDING_LEFT, y, &line_num, num_style);
-            }
-
-            // Draw line content (fence lines and content inside code block)
             let show_as_code = is_fence || was_in_code_block;
-            let styled_line = self.highlight_line(line, show_as_code);
-            let line_content_x = inner.x + PADDING_LEFT + line_num_width as u16 + body_center_offset;
 
-            buf.set_line(line_content_x, y, &styled_line, text_area_width);
+            // Get visual lines (wrapped segments)
+            let visual_lines = Self::wrap_line_for_display(line, wrap_width);
 
-            // Restore grid characters where text is visually invisible (spaces, etc.)
-            {
-                use unicode_width::UnicodeWidthStr;
-                let line_display_width = line.width() as u16;
-                Self::restore_grid_over_whitespace(
-                    self.grid_style, buf, (inner.x, inner.y), inner.width,
-                    line_content_x, line_content_x + line_display_width, y,
-                );
-            }
+            for (seg_idx, segment) in visual_lines.iter().enumerate() {
+                if display_row >= visible_height {
+                    break;
+                }
 
-            // Draw cursor
-            if is_cursor_line {
-                // Convert character index to display width
-                use unicode_width::UnicodeWidthChar;
-                let display_col: usize = line.chars()
-                    .take(self.cursor_col)
-                    .map(|c| c.width().unwrap_or(0))
-                    .sum();
-                let cursor_x = line_content_x + display_col as u16;
-                if cursor_x < inner.x + inner.width {
-                    // Get the character at cursor position (or space if at end of line)
-                    let cursor_char = line.chars().nth(self.cursor_col).unwrap_or(' ');
-                    let char_str = cursor_char.to_string();
-                    // Draw with reversed colors
-                    buf.set_string(
-                        cursor_x,
-                        y,
-                        &char_str,
-                        Style::default().bg(theme::cursor_bg()).fg(theme::cursor_fg()),
+                let y = inner.y + PADDING_TOP + display_row as u16;
+
+                // Draw line number (only for first segment)
+                if self.show_line_numbers && seg_idx == 0 {
+                    let line_num = format!("{:>width$} ", line_idx + 1, width = line_num_width - 1);
+                    let num_style = if is_cursor_line {
+                        Style::default().fg(theme::accent_yellow())
+                    } else {
+                        Style::default().fg(theme::fg_muted())
+                    };
+                    buf.set_string(inner.x + PADDING_LEFT, y, &line_num, num_style);
+                }
+
+                // Draw line content
+                let styled_line = self.highlight_line(&segment.text, show_as_code);
+                buf.set_line(line_content_x, y, &styled_line, content_width);
+
+                // Restore grid characters
+                {
+                    use unicode_width::UnicodeWidthStr;
+                    let seg_display_width = segment.text.width().min(content_width as usize) as u16;
+                    Self::restore_grid_over_whitespace(
+                        self.grid_style, buf, (inner.x, inner.y), inner.width,
+                        line_content_x, line_content_x + seg_display_width, y,
                     );
                 }
+
+                // Draw cursor if on this segment
+                if is_cursor_line {
+                    if self.cursor_col >= segment.char_start && self.cursor_col < segment.char_end {
+                        use unicode_width::UnicodeWidthChar;
+                        let col_in_seg = self.cursor_col - segment.char_start;
+                        let display_col: usize = segment.text.chars()
+                            .take(col_in_seg)
+                            .map(|c| c.width().unwrap_or(0))
+                            .sum();
+                        let cursor_x = line_content_x + display_col as u16;
+                        if cursor_x < line_content_x + content_width {
+                            let cursor_char = segment.text.chars().nth(col_in_seg).unwrap_or(' ');
+                            buf.set_string(
+                                cursor_x, y, &cursor_char.to_string(),
+                                Style::default().bg(theme::cursor_bg()).fg(theme::cursor_fg()),
+                            );
+                        }
+                    } else if seg_idx == visual_lines.len() - 1 && self.cursor_col >= segment.char_end {
+                        // Cursor at end of line
+                        use unicode_width::UnicodeWidthStr;
+                        let cursor_x = line_content_x + segment.text.width() as u16;
+                        if cursor_x < line_content_x + content_width {
+                            buf.set_string(
+                                cursor_x, y, " ",
+                                Style::default().bg(theme::cursor_bg()).fg(theme::cursor_fg()),
+                            );
+                        }
+                    }
+                }
+
+                display_row += 1;
             }
         }
     }

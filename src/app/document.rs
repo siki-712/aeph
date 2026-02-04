@@ -6,6 +6,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::markdown;
 use super::typing;
 
+
 pub struct Document {
     pub content: String,
     pub file_path: Option<PathBuf>,
@@ -14,6 +15,8 @@ pub struct Document {
     pub scroll_offset: usize,
     pub modified: bool,
     undo_stack: Vec<String>,
+    /// Visual wrap width for cursor movement (None = no wrap)
+    pub wrap_width: Option<u16>,
 }
 
 impl Document {
@@ -37,6 +40,7 @@ impl Document {
             scroll_offset: 0,
             modified: false,
             undo_stack: Vec::new(),
+            wrap_width: None,
         })
     }
 
@@ -420,17 +424,146 @@ impl Document {
     }
 
     pub fn move_cursor_up(&mut self) {
-        if self.cursor_line > 0 {
-            self.cursor_line -= 1;
-            self.clamp_cursor_col();
+        if let Some(wrap_width) = self.wrap_width {
+            // Visual line-based movement
+            let line = self.current_line();
+            let (visual_col, visual_row) = self.cursor_visual_position(line, wrap_width);
+
+            if visual_row > 0 {
+                // Move up within the same logical line
+                let new_visual_row = visual_row - 1;
+                self.cursor_col = self.col_from_visual_row(line, wrap_width, new_visual_row, visual_col);
+            } else if self.cursor_line > 0 {
+                // Move to previous logical line
+                self.cursor_line -= 1;
+                let prev_line = self.current_line();
+                let prev_visual_rows = self.visual_line_count(prev_line, wrap_width);
+                self.cursor_col = self.col_from_visual_row(prev_line, wrap_width, prev_visual_rows - 1, visual_col);
+            }
+        } else {
+            if self.cursor_line > 0 {
+                self.cursor_line -= 1;
+                self.clamp_cursor_col();
+            }
         }
     }
 
     pub fn move_cursor_down(&mut self) {
-        if self.cursor_line < self.line_count().saturating_sub(1) {
-            self.cursor_line += 1;
-            self.clamp_cursor_col();
+        if let Some(wrap_width) = self.wrap_width {
+            // Visual line-based movement
+            let line = self.current_line().to_string();
+            let visual_rows = self.visual_line_count(&line, wrap_width);
+            let (visual_col, visual_row) = self.cursor_visual_position(&line, wrap_width);
+
+            if visual_row < visual_rows - 1 {
+                // Move down within the same logical line
+                let new_visual_row = visual_row + 1;
+                self.cursor_col = self.col_from_visual_row(&line, wrap_width, new_visual_row, visual_col);
+            } else if self.cursor_line < self.line_count().saturating_sub(1) {
+                // Move to next logical line
+                self.cursor_line += 1;
+                let next_line = self.current_line();
+                self.cursor_col = self.col_from_visual_row(next_line, wrap_width, 0, visual_col);
+            }
+        } else {
+            if self.cursor_line < self.line_count().saturating_sub(1) {
+                self.cursor_line += 1;
+                self.clamp_cursor_col();
+            }
         }
+    }
+
+    /// Get visual position (column within visual row, visual row index) for cursor
+    fn cursor_visual_position(&self, line: &str, wrap_width: u16) -> (usize, usize) {
+        use unicode_width::UnicodeWidthChar;
+        let mut visual_col = 0usize;
+        let mut visual_row = 0usize;
+        let mut width = 0u16;
+
+        for (i, ch) in line.chars().enumerate() {
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            // Check for wrap BEFORE checking cursor position
+            // This ensures cursor at wrap boundary is reported on the new row
+            if width + ch_width > wrap_width && width > 0 {
+                visual_row += 1;
+                width = 0;
+                visual_col = 0;
+            }
+            if i == self.cursor_col {
+                return (visual_col, visual_row);
+            }
+            width += ch_width;
+            visual_col += 1;
+        }
+        (visual_col, visual_row)
+    }
+
+    /// Count visual lines for a logical line
+    fn visual_line_count(&self, line: &str, wrap_width: u16) -> usize {
+        use unicode_width::UnicodeWidthChar;
+        if line.is_empty() {
+            return 1;
+        }
+        let mut rows = 1usize;
+        let mut width = 0u16;
+        for ch in line.chars() {
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            if width + ch_width > wrap_width && width > 0 {
+                rows += 1;
+                width = ch_width;
+            } else {
+                width += ch_width;
+            }
+        }
+        rows
+    }
+
+    /// Get character column from visual row and visual column position
+    fn col_from_visual_row(&self, line: &str, wrap_width: u16, target_row: usize, target_visual_col: usize) -> usize {
+        use unicode_width::UnicodeWidthChar;
+        let chars: Vec<char> = line.chars().collect();
+        let mut row = 0usize;
+        let mut width = 0u16;
+        let mut row_start = 0usize;
+
+        // Find the start of target_row
+        for (i, &ch) in chars.iter().enumerate() {
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            if width + ch_width > wrap_width && width > 0 {
+                if row == target_row {
+                    break;
+                }
+                row += 1;
+                row_start = i;
+                width = ch_width;
+            } else {
+                width += ch_width;
+            }
+        }
+
+        if row < target_row {
+            row_start = chars.len();
+        }
+
+        // Now find the position within target_row
+        let mut col = row_start;
+        let mut visual_col = 0usize;
+        width = 0;
+
+        for &ch in chars[row_start..].iter() {
+            if visual_col >= target_visual_col {
+                break;
+            }
+            let ch_width = ch.width().unwrap_or(0) as u16;
+            if width + ch_width > wrap_width && width > 0 {
+                break; // End of this visual row
+            }
+            width += ch_width;
+            col += 1;
+            visual_col += 1;
+        }
+
+        col.min(chars.len())
     }
 
     pub fn move_cursor_left(&mut self) {
