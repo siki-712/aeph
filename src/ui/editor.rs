@@ -556,7 +556,12 @@ impl Widget for EditorWidget<'_> {
                     } else {
                         Style::default().fg(theme::fg_muted())
                     };
-                    buf.set_string(inner.x + PADDING_LEFT, y, &line_num, num_style);
+                    let num_x = inner.x + PADDING_LEFT;
+                    buf.set_string(num_x, y, &line_num, num_style);
+                    Self::restore_grid_over_whitespace(
+                        self.grid_style, buf, (inner.x, inner.y), inner.width,
+                        num_x, num_x + line_num_width as u16, y,
+                    );
                 }
 
                 // Draw line content
