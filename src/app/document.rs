@@ -165,9 +165,25 @@ impl Document {
     }
 
     pub fn insert_task(&mut self) {
-        self.move_cursor_line_end();
-        self.insert_newline();
-        self.insert_str("- [ ] ");
+        let line = self.current_line().to_string();
+        let trimmed = line.trim_start();
+        if line.is_empty() {
+            // Empty line: insert task marker in place
+            self.insert_str("- [ ] ");
+        } else if trimmed.starts_with("- [ ] ")
+            || trimmed.starts_with("- [x] ")
+            || trimmed.starts_with("- [X] ")
+        {
+            // Already a task: add a new task line below
+            self.move_cursor_line_end();
+            self.insert_newline();
+            self.insert_str("- [ ] ");
+        } else {
+            // Non-task text: prepend task marker to current line
+            let new_line = format!("- [ ] {}", line);
+            self.replace_current_line(&new_line);
+            self.cursor_col += 6;
+        }
     }
 
     /// Check if current line is a list line (bullet, task, numbered, or blockquote)
