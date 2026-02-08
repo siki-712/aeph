@@ -1,6 +1,6 @@
 {
   "name": "aeph-linux-x64",
-  "version": "0.1.9",
+  "version": "1.0.0",
   "description": "aeph binary for Linux x64",
   "repository": {
     "type": "git",

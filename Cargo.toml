@@ -1,6 +1,6 @@
 [package]
 name = "aeph"
-version = "0.1.9"
+version = "1.0.0"
 edition = "2024"
 description = "aeph - A TUI markdown paper with task management"
 license = "MIT"
