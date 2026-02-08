@@ -1,6 +1,6 @@
 {
   "name": "aeph",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "A minimal TUI markdown editor with task management",
   "repository": {
     "type": "git",
@@ -14,9 +14,9 @@
     "bin"
   ],
   "optionalDependencies": {
-    "aeph-darwin-arm64": "0.1.8",
-    "aeph-darwin-x64": "0.1.8",
-    "aeph-linux-x64": "0.1.8"
+    "aeph-darwin-arm64": "0.1.9",
+    "aeph-darwin-x64": "0.1.9",
+    "aeph-linux-x64": "0.1.9"
   },
   "keywords": [
     "markdown",
