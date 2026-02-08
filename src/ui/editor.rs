@@ -428,7 +428,8 @@ impl Widget for EditorWidget<'_> {
         const PADDING_LEFT: u16 = 1;
         const PADDING_RIGHT: u16 = 1;
 
-        let lines: Vec<&str> = self.content.lines().collect();
+        let collected: Vec<&str> = self.content.lines().collect();
+        let lines = if collected.is_empty() { vec![""] } else { collected };
         let visible_height = inner.height.saturating_sub(PADDING_TOP) as usize;
         let total_lines = lines.len();
 
