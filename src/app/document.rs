@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
 use unicode_width::UnicodeWidthStr;
 
 use crate::markdown;
@@ -17,12 +18,16 @@ pub struct Document {
     undo_stack: Vec<String>,
     /// Visual wrap width for cursor movement (None = no wrap)
     pub wrap_width: Option<u16>,
+    /// Last known mtime of the file on disk (for external change detection)
+    pub last_mtime: Option<SystemTime>,
 }
 
 impl Document {
     pub fn new(file_path: Option<PathBuf>) -> Result<Self> {
+        let mut last_mtime = None;
         let content = if let Some(ref path) = file_path {
             if path.exists() {
+                last_mtime = fs::metadata(path).ok().and_then(|m| m.modified().ok());
                 fs::read_to_string(path)
                     .with_context(|| format!("Failed to read: {}", path.display()))?
             } else {
@@ -41,6 +46,7 @@ impl Document {
             modified: false,
             undo_stack: Vec::new(),
             wrap_width: None,
+            last_mtime,
         })
     }
 
@@ -92,8 +98,44 @@ impl Document {
             fs::write(path, &self.content)
                 .with_context(|| format!("Failed to save: {}", path.display()))?;
             self.modified = false;
+            self.last_mtime = fs::metadata(path).ok().and_then(|m| m.modified().ok());
         }
         Ok(())
+    }
+
+    /// Reload file content from disk, updating mtime and clamping cursor.
+    pub fn reload(&mut self) -> Result<()> {
+        if let Some(ref path) = self.file_path {
+            if path.exists() {
+                self.content = fs::read_to_string(path)
+                    .with_context(|| format!("Failed to reload: {}", path.display()))?;
+                self.last_mtime = fs::metadata(path).ok().and_then(|m| m.modified().ok());
+                self.modified = false;
+                // Clamp cursor to valid range
+                self.cursor_line = self.cursor_line.min(self.line_count().saturating_sub(1));
+                self.cursor_col = self.cursor_col.min(self.current_line().chars().count());
+            }
+        }
+        Ok(())
+    }
+
+    /// Check if the file has been modified externally since last read/save.
+    pub fn check_external_change(&self) -> bool {
+        if let (Some(path), Some(last)) = (&self.file_path, self.last_mtime) {
+            if let Ok(meta) = fs::metadata(path) {
+                if let Ok(disk_mtime) = meta.modified() {
+                    return disk_mtime != last;
+                }
+            }
+        }
+        false
+    }
+
+    /// Update last_mtime to current disk mtime without reloading content.
+    pub fn snapshot_mtime(&mut self) {
+        if let Some(ref path) = self.file_path {
+            self.last_mtime = fs::metadata(path).ok().and_then(|m| m.modified().ok());
+        }
     }
 
     pub fn format(&mut self) -> Result<()> {

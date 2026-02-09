@@ -26,6 +26,10 @@ pub struct AppState {
     pub grid_style: GridStyle,
     pub text_align: TextAlign,
     pub quote_seed: u64,
+    /// Some(doc_index) when an external conflict needs user resolution
+    pub conflict_prompt: Option<usize>,
+    /// Tracks last user input time for idle-based external change polling
+    pub last_input: Option<Instant>,
 }
 
 impl AppState {
@@ -85,6 +89,8 @@ impl AppState {
             grid_style: GridStyle::from_u8(session.grid_style),
             text_align,
             quote_seed,
+            conflict_prompt: None,
+            last_input: None,
         })
     }
 
@@ -99,6 +105,21 @@ impl AppState {
     pub fn switch_to(&mut self, index: usize) {
         if index < self.documents.len() {
             self.current_doc = index;
+            self.check_current_doc_conflict();
+        }
+    }
+
+    /// Check the current document for external changes and handle accordingly.
+    pub fn check_current_doc_conflict(&mut self) {
+        let idx = self.current_doc;
+        if self.documents[idx].check_external_change() {
+            if self.documents[idx].modified {
+                self.conflict_prompt = Some(idx);
+            } else {
+                // Unmodified: silent auto-reload
+                let _ = self.documents[idx].reload();
+                self.notification = Some("Reloaded (changed externally)".to_string());
+            }
         }
     }
 
@@ -112,6 +133,11 @@ impl AppState {
 
     // Delegate methods to current document
     pub fn save(&mut self) -> Result<()> {
+        let idx = self.current_doc;
+        if self.documents[idx].check_external_change() && self.documents[idx].modified {
+            self.conflict_prompt = Some(idx);
+            return Ok(());
+        }
         self.doc_mut().save()
     }
 
@@ -120,9 +146,15 @@ impl AppState {
     }
 
     pub fn save_all_modified(&mut self) -> Result<()> {
-        for doc in &mut self.documents {
-            if doc.modified {
-                doc.save()?;
+        for i in 0..self.documents.len() {
+            if self.documents[i].modified {
+                if self.documents[i].check_external_change() {
+                    // External conflict on this doc: skip saving, show prompt
+                    self.current_doc = i;
+                    self.conflict_prompt = Some(i);
+                    return Ok(());
+                }
+                self.documents[i].save()?;
             }
         }
         Ok(())

@@ -17,6 +17,7 @@ pub struct StatusBar<'a> {
     doc_num: usize,
     notification: Option<&'a str>,
     leader_input: Option<&'a str>,
+    conflict_prompt: bool,
 }
 
 impl<'a> StatusBar<'a> {
@@ -35,6 +36,7 @@ impl<'a> StatusBar<'a> {
             doc_num: 1,
             notification: None,
             leader_input: None,
+            conflict_prompt: false,
         }
     }
 
@@ -55,6 +57,11 @@ impl<'a> StatusBar<'a> {
 
     pub fn leader_input(mut self, input: Option<&'a str>) -> Self {
         self.leader_input = input;
+        self
+    }
+
+    pub fn conflict_prompt(mut self, active: bool) -> Self {
+        self.conflict_prompt = active;
         self
     }
 }
@@ -98,6 +105,16 @@ impl Widget for StatusBar<'_> {
             return;
         }
 
+        // Conflict prompt
+        if self.conflict_prompt {
+            let prompt = Line::from(Span::styled(
+                " File changed externally [K]eep/[R]eload/[Esc] ",
+                Style::default().fg(theme::accent_yellow()).bg(bg),
+            ));
+            buf.set_line(area.x, area.y, &prompt, area.width);
+            return;
+        }
+
         // Show notification if present
         if let Some(msg) = self.notification {
             let notification = Line::from(Span::styled(
@@ -109,7 +126,11 @@ impl Widget for StatusBar<'_> {
         }
 
         // Left side: doc number only
-        let modified_marker = if self.modified { "•" } else { "" };
+        let modified_marker = if self.modified {
+            "•"
+        } else {
+            ""
+        };
 
         let left = Line::from(vec![
             Span::styled(

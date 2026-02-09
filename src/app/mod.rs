@@ -47,6 +47,8 @@ pub fn run(file: Option<PathBuf>) -> Result<()> {
 
 const AUTO_SAVE_DELAY: Duration = Duration::from_millis(500);
 const NOTIFICATION_DURATION: Duration = Duration::from_secs(2);
+const IDLE_FIRST_CHECK: Duration = Duration::from_secs(5);
+const IDLE_POLL_INTERVAL: Duration = Duration::from_secs(30);
 
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
@@ -54,6 +56,7 @@ fn run_app(
 ) -> Result<()> {
     let mut last_edit: Option<Instant> = None;
     let mut notification_time: Option<Instant> = None;
+    let mut last_idle_check: Option<Instant> = None;
 
     loop {
         // Auto-save after user stops typing
@@ -95,6 +98,23 @@ fn run_app(
             }
         }
 
+        // Idle-based external change check (only when no conflict prompt is active)
+        if state.conflict_prompt.is_none() {
+            if let Some(last_input_time) = state.last_input {
+                let idle_duration = last_input_time.elapsed();
+                if idle_duration >= IDLE_FIRST_CHECK {
+                    let should_check = match last_idle_check {
+                        None => true,
+                        Some(t) => t.elapsed() >= IDLE_POLL_INTERVAL,
+                    };
+                    if should_check {
+                        last_idle_check = Some(Instant::now());
+                        state.check_current_doc_conflict();
+                    }
+                }
+            }
+        }
+
         terminal.draw(|frame| {
             let area = frame.area();
 
@@ -128,6 +148,7 @@ fn run_app(
 
             // Status bar
             let leader_str = state.leader_buffer.as_ref().map(|(s, _)| s.as_str());
+            let has_conflict = state.conflict_prompt.is_some();
             let status = StatusBar::new(
                 doc.modified,
                 doc.cursor_line,
@@ -137,7 +158,8 @@ fn run_app(
             .goto_input(state.goto_input.as_deref())
             .doc_indicator(state.current_doc + 1, state.documents.len())
             .notification(state.notification.as_deref())
-            .leader_input(leader_str);
+            .leader_input(leader_str)
+            .conflict_prompt(has_conflict);
             frame.render_widget(status, chunks[1]);
 
             // Help overlay
@@ -185,6 +207,10 @@ fn run_app(
             }
 
             if let Event::Key(key) = event {
+                // Track last input time for idle-based polling
+                state.last_input = Some(Instant::now());
+                last_idle_check = None;
+
                 // File picker mode
                 if state.show_file_picker {
                     match key.code {
@@ -261,6 +287,31 @@ fn run_app(
                             if let Some(ref mut input) = state.goto_input {
                                 input.push(c);
                             }
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                // Conflict prompt mode
+                if state.conflict_prompt.is_some() {
+                    match key.code {
+                        KeyCode::Char('k') | KeyCode::Char('K') => {
+                            // Keep local changes, update mtime to avoid re-trigger
+                            state.doc_mut().snapshot_mtime();
+                            state.conflict_prompt = None;
+                            state.notification = Some("Kept local changes".to_string());
+                        }
+                        KeyCode::Char('r') | KeyCode::Char('R') => {
+                            // Reload from disk (push undo first so user can Ctrl+Z)
+                            state.push_undo();
+                            let _ = state.doc_mut().reload();
+                            state.conflict_prompt = None;
+                            state.notification = Some("Reloaded from disk".to_string());
+                        }
+                        KeyCode::Esc => {
+                            // Dismiss without updating mtime (may re-trigger)
+                            state.conflict_prompt = None;
                         }
                         _ => {}
                     }
